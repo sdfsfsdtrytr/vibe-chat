@@ -12,6 +12,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Android App
-        uses: PWABuilder/pwa-publish-action@v2
+        uses: pwa-builder/pwa-publish-action@v2
         with:
           android-key-store: ${{ secrets.ANDROID_KEYSTORE }}

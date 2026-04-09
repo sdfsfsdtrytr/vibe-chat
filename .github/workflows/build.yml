@@ -1,0 +1,20 @@
+name: PWA to Android
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Android
+        uses: pwa-builder/pwa-publish-action@v2
+        with:
+          android-key-store: ${{ secrets.ANDROID_KEYSTORE }}
+          android-key-store-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          android-key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          android-key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}

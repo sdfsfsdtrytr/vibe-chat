@@ -156,7 +156,25 @@
         box-shadow: 0 5px 15px rgba(0, 242, 254, 0.4);
     }
 }
-    </style>
+
+/* Запрет выделения текста на мобилках */
+@media (max-width: 768px) {
+    .msg {
+        -webkit-user-select: none !important;
+        user-select: none !important;
+        -webkit-touch-callout: none !important;
+        touch-action: manipulation;
+    }
+}
+/* Системные экраны поверх всего */
+#screen-deleted, #screen-tech {
+    position: fixed; inset: 0; z-index: 9999999 !important;
+    display: none; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; padding: 20px;
+    background: #0b111d;
+}
+    
+</style>
 </head>
 <body class="theme-dark">
 
@@ -305,12 +323,20 @@ const firebaseConfig = {
     storageBucket: "vtcty-6c839.firebasestorage.app"
 };
 
-// 2. Инициализация (создаем ту самую db, которую он не видит)
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
+// Инициализация
+try {
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    window.db = firebase.database();
+    window.storage = firebase.storage();
+    console.log("Firebase готов к работе");
+} catch (e) {
+    alert("Ошибка инициализации Firebase: " + e.message);
 }
-const db = firebase.database();
-const storage = firebase.storage();
+
+// ТЕСТ КНОПКИ (Добавь это, чтобы проверить жива ли страница)
+console.log("Скрипт загружен полностью");
 
 // 3. Безопасный запуск уведомлений
 let messaging = null;
@@ -373,61 +399,72 @@ function mobTab(id) {
         async function register() {
     try {
         const name = document.getElementById('r-n-input').value.trim();
-        const emoji = document.getElementById('r-e-input').value || '😊';
-        let handle = document.getElementById('r-h-input').value.toLowerCase().trim();
-        
-        if(!name || !handle) return alert("Заполни все поля!");
-        if(!handle.startsWith('@')) handle = '@' + handle;
-        const hKey = handle.replace('@','');
+        const emoji = document.getElementById('r-e-input').value.trim() || '😊';
+        let hInput = document.getElementById('r-h-input').value.toLowerCase().trim();
+
+        if (!name || !hInput) return alert("Заполни имя и @username!");
+
+        const handle = hInput.startsWith('@') ? hInput : '@' + hInput;
+        const hKey = handle.replace('@', '');
 
         // Проверка ника
-        const snap = await db.ref('handles/' + hKey).once('value');
-        if(snap.exists()) return alert("Этот ник уже занят!");
+        const handleSnap = await db.ref('handles/' + hKey).once('value');
+        if (handleSnap.exists()) return alert("Этот @ник уже занят!");
 
-        const id = Math.random().toString(36).substr(2, 6).toUpperCase();
-        const newUser = { 
-            id, name, handle, 
-            avatar: emoji, 
-            bio: "Привет, я в Vibe!", 
-            verified: false, 
-            online: true
+        // Создаём пользователя
+        const newUserRef = db.ref('users').push();  // ← лучше так
+        const id = newUserRef.key;
+
+        const newUser = {
+            id: id,
+            name: name,
+            handle: handle,
+            avatar: emoji,
+            bio: "Привет, я в Vibe!",
+            verified: false,
+            online: true,
+            hasSeenVerifyNotif: true,
+            createdAt: Date.now()
         };
-        
-        await db.ref('users/' + id).set(newUser); 
+
+        await newUserRef.set(newUser);
         await db.ref('handles/' + hKey).set(id);
-        
+
         localStorage.setItem('liquid_pro_v32', JSON.stringify(newUser));
-        location.reload(); 
+
+        alert("Аккаунт создан успешно! Страница обновится...");
+        setTimeout(() => location.reload(), 1000);
     } catch (e) {
         console.error(e);
-        alert("Ошибка регистрации: " + e.message);
+        alert("Ошибка регистрации: " + (e.message || e));
     }
 }
 
 async function login() {
     try {
         let h = document.getElementById('l-h-input').value.replace('@','').toLowerCase().trim();
-        if(!h) return alert("Введи свой @ник!");
-        
+        if (!h) return alert("Введи @ник!");
+
         const snap = await db.ref('handles/' + h).once('value');
-        if(!snap.exists()) return alert("Пользователь не найден!");
-        
+        if (!snap.exists()) return alert("Пользователь с таким ником не найден!");
+
         const uid = snap.val();
         const uSnap = await db.ref('users/' + uid).once('value');
-        
-        if(uSnap.exists()) {
-            localStorage.setItem('liquid_pro_v32', JSON.stringify(uSnap.val()));
+
+        if (uSnap.exists()) {
+            const userData = uSnap.val();
+            localStorage.setItem('liquid_pro_v32', JSON.stringify(userData));
             location.reload();
         } else {
-            alert("Данные пользователя не найдены в базе.");
+            alert("Профиль не найден в базе данных.");
         }
     } catch (e) {
-        console.error(e);
-        alert("Ошибка входа: " + e.message);
+        console.error("Ошибка входа:", e);
+        alert("Ошибка входа: " + (e.message || e.code || "Неизвестная ошибка"));
     }
 }
-
-       async function initApp() {
+    
+async function initApp() {
     if (!me || !me.id) return;
     document.getElementById('auth-page').style.display = 'none';
     
@@ -572,23 +609,32 @@ async function login() {
 }
 
 function openPCChat(user) {
-    activePeer = user; 
+    activePeer = user;
     document.getElementById('pc-active-chat').style.display = 'flex';
     document.getElementById('pc-no-chat').style.display = 'none';
     const header = document.getElementById('pc-chat-header-ui');
     const badge = user.verified ? vBadge : '';
+
     if (user.isDeleted) {
         header.innerHTML = `<b>Удалённый аккаунт</b>`;
+        header.onclick = null;
         document.querySelector('.main-area .chat-input-bar').style.display = 'none';
     } else {
-        header.innerHTML = `<div class="avatar-emoji" style="width:40px;height:40px;font-size:20px;">${user.avatar}</div><b style="margin-left:10px">${user.name}${badge}</b>`;
+        header.innerHTML = `
+            <div style="display:flex; align-items:center; gap:12px; cursor:pointer;">
+                <div class="avatar-emoji" style="width:40px;height:40px;font-size:20px;">${user.avatar}</div>
+                <div>
+                    <div style="font-weight:bold;">${user.name}${badge}</div>
+                    <div style="font-size:10px; color:var(--accent); opacity:0.8;">Нажми, чтобы открыть профиль</div>
+                </div>
+            </div>`;
+        header.onclick = () => showPeerProfile(); 
         document.querySelector('.main-area .chat-input-bar').style.display = 'flex';
     }
-    // ВОТ ЭТО ВКЛЮЧАЕТ ПРОФИЛЬ НА ПК:
-    header.onclick = () => showPeerProfile(); 
     startChatListener(user.id, 'pc');
 }
-       function startChatListener(peerId, mode) {
+
+function startChatListener(peerId, mode) {
     const rid = me.id < peerId ? me.id + '_' + peerId : peerId + '_' + me.id;
     db.ref('chats/' + rid).off();
 
@@ -671,23 +717,31 @@ function openPCChat(user) {
 async function sendText(mode) {
     const inp = document.getElementById(mode + '-input'); 
     if(!inp || !inp.value || !activePeer) return;
-
-    if(activePeer.isDeleted) return alert("Пользователь удалён, писать нельзя");
-
-    if(me.blocks && me.blocks[activePeer.id]) {
-        return alert("Разблокируйте пользователя, чтобы написать");
-    }
+    if(activePeer.isDeleted) return alert("Аккаунт удалён");
 
     const rid = me.id < activePeer.id ? me.id + '_' + activePeer.id : activePeer.id + '_' + me.id;
-    await db.ref('chats/' + rid).push({ sender: me.id, val: inp.value, time: Date.now() });
-    inp.value = "";
-}
-
-function showPeerProfile() {
-    if(!activePeer) return;
-    contextPeerId = activePeer.id; 
     
-    // Проверяем статус блока (меняется без перезагрузки)
+    const msgData = { 
+        sender: me.id, 
+        val: inp.value, 
+        time: Date.now() 
+    };
+
+    // Если есть ответ на сообщение, добавляем его в объект
+    if (replyingTo) {
+        msgData.reply = true;
+        msgData.replyText = replyingTo.text;
+        msgData.replyFrom = replyingTo.from;
+    }
+
+    await db.ref('chats/' + rid).push(msgData);
+    
+    // Очистка
+    inp.value = "";
+    cancelReply(); // Прячем плашку ответа после отправки
+}    
+    
+// Проверяем статус блока (меняется без перезагрузки)
     const isBlocked = me.blocks && me.blocks[contextPeerId] === true;
     
     const popAva = document.getElementById('pop-ava');
@@ -960,50 +1014,66 @@ async function giveVerify(id) {
 function showPeerProfile() {
     if(!activePeer) return;
     contextPeerId = activePeer.id; 
-    document.getElementById('pop-ava').innerText = activePeer.isDeleted ? '🚫' : activePeer.avatar;
+    
+    // Проверяем статус блока
+    const isBlocked = (me.blocks && me.blocks[contextPeerId] === true);
+    
+    const popAva = document.getElementById('pop-ava');
+    popAva.innerText = activePeer.isDeleted ? '🚫' : activePeer.avatar;
+    
     document.getElementById('pop-name').innerHTML = activePeer.isDeleted ? 'Аккаунт удалён' : (activePeer.name + (activePeer.verified ? vBadge : ''));
     document.getElementById('pop-handle').innerText = activePeer.handle;
     document.getElementById('pop-bio').innerText = activePeer.isDeleted ? 'Этот аккаунт заблокирован.' : (activePeer.bio || 'Нет описания');
+    
+    // Устанавливаем текст кнопки в профиле
+    const bBtn = document.getElementById('pop-block-btn');
+    if(bBtn) bBtn.innerText = isBlocked ? '🔓 Разблокировать' : '🚫 Заблокировать';
+    
     document.getElementById('profile-popup').style.display = 'flex';
 }
 
-function showChatListMenu(e, id) { 
-    e.preventDefault(); 
-    contextPeerId = id; 
-    const m = document.getElementById('chat-list-menu'); 
-    m.style.display = 'block'; 
-    m.style.left = e.pageX + 'px'; 
-    m.style.top = e.pageY + 'px'; 
-}
-
 async function toggleBlock() { 
-    const isBlocked = (me.blocks && me.blocks[contextPeerId]);
-    await db.ref(`users/${me.id}/blocks/${contextPeerId}`).set(isBlocked ? null : true); 
-    alert(isBlocked ? "Разблокирован" : "Заблокирован");
+    if(!contextPeerId) return;
+    const isCurrentlyBlocked = (me.blocks && me.blocks[contextPeerId] === true);
+    const newStatus = !isCurrentlyBlocked;
+
+    await db.ref(`users/${me.id}/blocks/${contextPeerId}`).set(newStatus ? true : null); 
+    
+    const bBtn = document.getElementById('pop-block-btn');
+    const menuBtnTxt = document.getElementById('block-btn-txt');
+    const newText = newStatus ? '🔓 Разблокировать' : '🚫 Заблокировать';
+    
+    if(bBtn) bBtn.innerText = newText;
+    if(menuBtnTxt) menuBtnTxt.innerText = newText;
+
     document.getElementById('chat-list-menu').style.display='none';
-    document.getElementById('profile-popup').style.display='none';
+    alert(newStatus ? "Пользователь заблокирован" : "Разблокирован");
 }
 
 async function removeChat() { 
+    if(!contextPeerId) return;
     if(confirm("Удалить друга и чат?")) {
         await db.ref(`users/${me.id}/friends/${contextPeerId}`).remove();
         document.getElementById('chat-list-menu').style.display='none';
         document.getElementById('profile-popup').style.display='none';
-        location.reload(); // Перезагрузим, чтобы чат исчез из списка
+        location.reload();
     }
 }
 
-// --- ЗАПУСК ПРИЛОЖЕНИЯ ---
+function logout() {
+    localStorage.removeItem('liquid_pro_v32');
+    location.reload();
+}
+
 window.onload = () => {
     const sUser = localStorage.getItem('liquid_pro_v32');
+
     if (sUser) {
         try {
             me = JSON.parse(sUser);
             if (me && me.id) {
                 initApp();
-                // Запускаем уведомления отдельно, чтобы ошибки в них не вешали чат
                 initPushNotifications().catch(e => console.log("Push error handled"));
-                
                 if (!isPC) {
                     setTimeout(() => { mobNavControl('home', 0); }, 500);
                 }
@@ -1013,6 +1083,8 @@ window.onload = () => {
         } catch (e) {
             localStorage.clear();
         }
+    } else {
+        document.getElementById('auth-page').style.display = 'flex';
     }
 };
 

@@ -458,12 +458,14 @@ async function login() {
         if(techScreen) techScreen.style.display = (isBreak && !isPrivileged) ? 'flex' : 'none';
     });
 
-// Слушатель ОБЪЯВЛЕНИЯ (Блокировка)
+// Слушатель ОБЪЯВЛЕНИЯ (Блокировка всех, кроме @artem)
     db.ref('settings/announcement').on('value', snap => {
         const data = snap.val();
         const screen = document.getElementById('screen-announcement');
         const textElem = document.getElementById('announcement-display-text');
-        if (data && data.active) {
+        
+        // Проверяем: включено ли И не является ли пользователь Артемом
+        if (data && data.active && me.handle !== '@artem') {
             textElem.innerText = data.text;
             screen.style.display = 'flex';
         } else {
@@ -471,14 +473,24 @@ async function login() {
         }
     });
 
-    // Слушатель РАССЫЛКИ
+    // Слушатель РАССЫЛКИ (Моментальное появление у всех, кроме @artem)
     db.ref('settings/broadcast').on('value', snap => {
         const data = snap.val();
-        if (data && data.id !== localStorage.getItem('last_broadcast_id')) {
-            document.getElementById('broadcast-display-text').innerText = data.text;
-            document.getElementById('screen-broadcast').style.display = 'flex';
-            // Сохраняем ID, чтобы показать только один раз
-            window.currentBroadcastId = data.id;
+        // Если данных нет, или это Артем — ничего не показываем
+        if (!data || !data.id || me.handle === '@artem') return;
+
+        const lastSeenId = localStorage.getItem('last_broadcast_id');
+        
+        // Если ID новый — показываем плашку моментально
+        if (data.id !== lastSeenId) {
+            const brdScreen = document.getElementById('screen-broadcast');
+            const brdText = document.getElementById('broadcast-display-text');
+            
+            if (brdScreen && brdText) {
+                brdText.innerText = data.text;
+                brdScreen.style.display = 'flex';
+                window.currentBroadcastId = data.id; 
+            }
         }
     });
 
@@ -1049,12 +1061,18 @@ async function updateAnnouncement(active) {
     alert(active ? "Объявление включено!" : "Объявление выключено!");
 }
 
-// Отправка Рассылки (Понятно)
 async function sendGlobalBroadcast() {
     const text = document.getElementById('admin-brd-text').value;
     if (!text) return alert("Введите текст!");
-    await db.ref('settings/broadcast').set({ id: Date.now().toString(), text: text });
-    alert("Рассылка отправлена!");
+    
+    // Создаем абсолютно новый ID на основе времени
+    const newId = "msg_" + Date.now(); 
+    
+    await db.ref('settings/broadcast').set({
+        id: newId,
+        text: text
+    });
+    alert("Рассылка отправлена моментально!");
 }
 
 // --- ЗАПУСК ПРИЛОЖЕНИЯ ---

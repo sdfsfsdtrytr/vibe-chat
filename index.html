@@ -311,21 +311,25 @@
 
     <script>       
           
-// 1. Настройки твоего Firebase
+// 1. Настройки твоего Firebase (ВСТАВЛЯЙ СЮДА)
 const firebaseConfig = {
     apiKey: "AIzaSyAcs0ELY176L-d0qLZlpj1aJcej2b8fdPI",
     authDomain: "vtcty-6c839.firebaseapp.com",
-    projectId: "vtcty-6c839",
     databaseURL: "https://vtcty-6c839-default-rtdb.europe-west1.firebasedatabase.app",
-    storageBucket: "vtcty-6c839.firebasestorage.app"
+    projectId: "vtcty-6c839",
+    storageBucket: "vtcty-6c839.firebasestorage.app",
+    messagingSenderId: "1013006453049",
+    appId: "1:1013006453049:web:0086f394f0cb491fe9c0e8",
+    measurementId: "G-LMCW69YC0B"
 };
 
-// 2. Инициализация (создаем ту самую db, которую он не видит)
+// 2. Инициализация (сразу после конфига)
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.database();
 const storage = firebase.storage();
+const auth = firebase.auth(); // Обязательно добавь эту строку
 
 // 3. Безопасный запуск уведомлений
 let messaging = null;

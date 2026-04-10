@@ -13,7 +13,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
     <style>
         :root {
@@ -45,11 +44,11 @@
         .avatar-emoji { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; background: var(--glass-heavy); border: 1px solid var(--accent); flex-shrink: 0; }
 
         /* ОТДЕЛЬНЫЙ ЭКРАН АВТОРИЗАЦИИ */
-        #auth-page { position: fixed; inset: 0; z-index: 1000000; background: #0b111d; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .auth-card { width: 400px; padding: 40px; text-align: center; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); background: #0f172a; box-shadow: 0 0 50px rgba(0,0,0,0.5); }
+        #auth-page { position: fixed; inset: 0; z-index: 100000; background: var(--bg); display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .auth-card { width: 400px; padding: 40px; text-align: center; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); }
         .auth-tabs { display: flex; gap: 10px; margin-bottom: 25px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 16px; }
-        .auth-tab { flex: 1; padding: 12px; border-radius: 12px; opacity: 0.4; cursor: pointer; color: white; text-align: center; transition: 0.3s; }
-        .auth-tab.active { background: var(--glass-heavy); opacity: 1; color: var(--accent); border: 1px solid var(--accent); }
+        .auth-tab { flex: 1; padding: 12px; border-radius: 12px; opacity: 0.4; cursor: pointer; }
+        .auth-tab.active { background: var(--glass-heavy); opacity: 1; color: var(--accent); }
 
         /* Контекстные меню */
         .custom-menu { position: fixed; z-index: 50000; width: 220px; background: #111827; border: 1px solid var(--accent); border-radius: 12px; display: none; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -160,7 +159,6 @@
     </style>
 </head>
 <body class="theme-dark">
-<div id="recaptcha-container"></div>
 
     <audio id="snd-msg" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"></audio>
 
@@ -189,42 +187,24 @@
 
     <!-- AUTH PAGE -->
     <div id="auth-page">
-        <div class="auth-card">
+        <div class="glass auth-card">
             <h1 style="color:var(--accent); margin-bottom:25px; font-size:32px;">Vibe</h1>
-            
             <div class="auth-tabs">
-                <div class="auth-tab active" id="tab-l" onclick="changeAuthTab('login')">Вход</div>
-                <div class="auth-tab" id="tab-r" onclick="changeAuthTab('reg')">Регистрация</div>
+                <div class="auth-tab active" id="tab-l" onclick="switchAuth('login')">Вход</div>
+                <div class="auth-tab" id="tab-r" onclick="switchAuth('reg')">Регистрация</div>
             </div>
-
-            <!-- ШАГ 1: ВВОД ТЕЛЕФОНА И НИКА -->
-            <div id="step-auth-1">
-                <div id="login-fields-area">
-                    <input type="text" id="auth-handle-link" placeholder="@username (для старых аккаунтов)">
-                    <p style="font-size: 10px; opacity: 0.5; margin-bottom: 15px;">Введите ник один раз для привязки телефона</p>
-                </div>
-                
-                <input type="tel" id="auth-phone" value="+7" oninput="if(!this.value.startsWith('+7'))this.value='+7'; this.value=this.value.replace(/[^\d+]/g,'');">
-                <button onclick="sendSMSCode()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 15px; border:none; cursor:pointer;">ОТПРАВИТЬ КОД</button>
+            <div id="form-login">
+                <input type="text" id="l-h-input" placeholder="@username">
+                <button onclick="login()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">ВОЙТИ</button>
             </div>
-
-            <!-- ШАГ 2: ВВОД КОДА (ПОЯВИТСЯ ПОСЛЕ СМС) -->
-            <div id="step-auth-2" style="display:none;">
-                <p style="font-size: 13px; margin-bottom: 10px; color: var(--accent);">Код из СМС</p>
-                <input type="number" id="auth-otp" placeholder="000000" style="text-align:center; font-size:20px; letter-spacing:5px;">
-                <button onclick="verifySMSCode()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 15px; border:none; cursor:pointer;">ВОЙТИ</button>
-            </div>
-
-            <!-- ШАГ 3: РЕГИСТРАЦИЯ НОВОГО -->
-            <div id="step-auth-3" style="display:none;">
-                <input type="text" id="reg-emoji" placeholder="😊" maxlength="2" style="font-size:30px; text-align:center; width:80px; margin:0 auto 10px; display:block; background:rgba(255,255,255,0.1); border:none;">
-                <input type="text" id="reg-name" placeholder="Твое Имя">
-                <input type="text" id="reg-handle" placeholder="@username">
-                <button onclick="registerNewUser()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px; border:none; cursor:pointer;">ЗАВЕРШИТЬ</button>
+            <div id="form-reg" style="display:none;">
+                <input type="text" id="r-e-input" placeholder="😊" maxlength="2" style="font-size:30px; text-align:center;">
+                <input type="text" id="r-n-input" placeholder="Твое имя">
+                <input type="text" id="r-h-input" placeholder="@username">
+                <button onclick="register()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">СОЗДАТЬ</button>
             </div>
         </div>
     </div>
-    <div id="recaptcha-container"></div>
 
     <!-- ПК -->
     <div id="pc-layout">
@@ -316,25 +296,21 @@
 
     <script>       
           
-// 1. Настройки твоего Firebase (ВСТАВЛЯЙ СЮДА)
+// 1. Настройки твоего Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyAcs0ELY176L-d0qLZlpj1aJcej2b8fdPI",
     authDomain: "vtcty-6c839.firebaseapp.com",
-    databaseURL: "https://vtcty-6c839-default-rtdb.europe-west1.firebasedatabase.app",
     projectId: "vtcty-6c839",
-    storageBucket: "vtcty-6c839.firebasestorage.app",
-    messagingSenderId: "1013006453049",
-    appId: "1:1013006453049:web:0086f394f0cb491fe9c0e8",
-    measurementId: "G-LMCW69YC0B"
+    databaseURL: "https://vtcty-6c839-default-rtdb.europe-west1.firebasedatabase.app",
+    storageBucket: "vtcty-6c839.firebasestorage.app"
 };
 
-// 2. Инициализация (сразу после конфига)
+// 2. Инициализация (создаем ту самую db, которую он не видит)
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.database();
 const storage = firebase.storage();
-const auth = firebase.auth(); // Обязательно добавь эту строку
 
 // 3. Безопасный запуск уведомлений
 let messaging = null;
@@ -387,114 +363,68 @@ function mobTab(id) {
         const vBadge = `<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M22.5 12.5C22.5 18.0228 18.0228 22.5 12.5 22.5C6.97715 22.5 2.5 18.0228 2.5 12.5C2.5 6.97715 6.97715 2.5 12.5 2.5C18.0228 2.5 22.5 6.97715 22.5 12.5Z" fill="#00A3FF"/><path d="M10.5 15.5L7.5 12.5L8.5 11.5L10.5 13.5L15.5 8.5L16.5 9.5L10.5 15.5Z" fill="white"/></svg></span>`;
         const themeList = ["dark", "light", "purple", "lime", "ocean", "sunset", "rose", "forest", "midnight", "gold"];
 
-        const auth = firebase.auth();
-let confirmResult = null;
-let authMode = "login";
-let userPhoneNumber = "";
-
-// 1. ОЖИВЛЯЕМ ВКЛАДКИ
-function changeAuthTab(mode) {
-    authMode = mode;
-    // Меняем активную вкладку
-    document.getElementById('tab-l').classList.toggle('active', mode === 'login');
-    document.getElementById('tab-r').classList.toggle('active', mode === 'reg');
-    
-    // Показываем ник только для входа
-    document.getElementById('login-fields-area').style.display = (mode === 'login' ? 'block' : 'none');
-    
-    // Сбрасываем видимость шагов
-    document.getElementById('step-auth-1').style.display = 'block';
-    document.getElementById('step-auth-2').style.display = 'none';
-    document.getElementById('step-auth-3').style.display = 'none';
-}
-
-// 2. ОЖИВЛЯЕМ КНОПКУ СМС (ТЕПЕРЬ ПОЯВИТСЯ СТРОКА КОДА)
-function sendSMSCode() {
-    const phone = document.getElementById('auth-phone').value.trim();
-    if (phone.length < 11) return alert("Введите номер полностью!");
-    
-    userPhoneNumber = phone;
-    
-    // Настройка невидимой проверки
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
-
-    auth.signInWithPhoneNumber(phone, window.recaptchaVerifier).then(res => {
-        confirmResult = res;
-        // МЕНЯЕМ ИНТЕРФЕЙС: прячем телефон, показываем СТРОКУ КОДА
-        document.getElementById('step-auth-1').style.display = 'none';
-        document.getElementById('step-auth-2').style.display = 'block';
-    }).catch(err => {
-        alert("Ошибка СМС: " + err.message);
-        console.error(err);
-    });
-}
-
-// 3. ПРОВЕРКА КОДА И ВХОД
-async function verifySMSCode() {
-    const otp = document.getElementById('auth-otp').value;
-    if (!otp) return alert("Введите код!");
-
-    confirmResult.confirm(otp).then(async (result) => {
-        const pKey = userPhoneNumber.replace('+', '');
-        const phoneSnap = await db.ref('phones/' + pKey).once('value');
-
-        if (phoneSnap.exists()) {
-            // Если телефон уже в базе - просто входим
-            const uid = phoneSnap.val();
-            const uSnap = await db.ref('users/' + uid).once('value');
-            enterMessenger(uSnap.val());
-        } else {
-            // Если телефон новый
-            if (authMode === 'login') {
-                // ПРИВЯЗКА К СТАРОМУ НИКУ
-                const handle = document.getElementById('auth-handle-link').value.trim().replace('@','').toLowerCase();
-                if (!handle) {
-                    alert("Введите ваш @username для привязки телефона!");
-                    return;
-                }
-                const hSnap = await db.ref('handles/' + handle).once('value');
-                if (!hSnap.exists()) return alert("Аккаунт не найден!");
-                
-                const uid = hSnap.val();
-                // Записываем телефон в профиль
-                await db.ref(`users/${uid}/phone`).set(userPhoneNumber);
-                await db.ref(`phones/${pKey}`).set(uid);
-                
-                const uSnap = await db.ref('users/' + uid).once('value');
-                enterMessenger(uSnap.val());
-            } else {
-                // Если была вкладка "Регистрация" - идем в Шаг 3 (поля профиля)
-                document.getElementById('step-auth-2').style.display = 'none';
-                document.getElementById('step-auth-3').style.display = 'block';
-            }
+        function switchAuth(t) {
+            document.getElementById('form-login').style.display = t==='login'?'block':'none';
+            document.getElementById('form-reg').style.display = t==='reg'?'block':'none';
+            document.getElementById('tab-l').className = t==='login'?'auth-tab active':'auth-tab';
+            document.getElementById('tab-r').className = t==='reg'?'auth-tab active':'auth-tab';
         }
-    }).catch(err => alert("Код неверный!"));
+
+        async function register() {
+    try {
+        const name = document.getElementById('r-n-input').value.trim();
+        const emoji = document.getElementById('r-e-input').value || '😊';
+        let handle = document.getElementById('r-h-input').value.toLowerCase().trim();
+        
+        if(!name || !handle) return alert("Заполни все поля!");
+        if(!handle.startsWith('@')) handle = '@' + handle;
+        const hKey = handle.replace('@','');
+
+        // Проверка ника
+        const snap = await db.ref('handles/' + hKey).once('value');
+        if(snap.exists()) return alert("Этот ник уже занят!");
+
+        const id = Math.random().toString(36).substr(2, 6).toUpperCase();
+        const newUser = { 
+            id, name, handle, 
+            avatar: emoji, 
+            bio: "Привет, я в Vibe!", 
+            verified: false, 
+            online: true
+        };
+        
+        await db.ref('users/' + id).set(newUser); 
+        await db.ref('handles/' + hKey).set(id);
+        
+        localStorage.setItem('liquid_pro_v32', JSON.stringify(newUser));
+        location.reload(); 
+    } catch (e) {
+        console.error(e);
+        alert("Ошибка регистрации: " + e.message);
+    }
 }
 
-// 4. РЕГИСТРАЦИЯ НОВОГО
-async function registerNewUser() {
-    const name = document.getElementById('reg-name').value.trim();
-    const handle = document.getElementById('reg-handle').value.trim().replace('@','').toLowerCase();
-    const emoji = document.getElementById('reg-emoji').value || '😊';
-    const pKey = userPhoneNumber.replace('+', '');
-
-    if (!name || !handle) return alert("Заполните поля!");
-    const hSnap = await db.ref('handles/' + handle).once('value');
-    if (hSnap.exists()) return alert("Ник уже занят!");
-
-    const id = Math.random().toString(36).substr(2, 6).toUpperCase();
-    const newUser = { id, name, handle: '@' + handle, avatar: emoji, phone: userPhoneNumber, online: true, bio: "Я в Vibe!" };
-
-    await db.ref('users/' + id).set(newUser);
-    await db.ref('handles/' + handle).set(id);
-    await db.ref('phones/' + pKey).set(id);
-
-    enterMessenger(newUser);
-}
-
-function enterMessenger(user) {
-    localStorage.setItem('liquid_pro_v32', JSON.stringify(user));
-    location.reload(); 
+async function login() {
+    try {
+        let h = document.getElementById('l-h-input').value.replace('@','').toLowerCase().trim();
+        if(!h) return alert("Введи свой @ник!");
+        
+        const snap = await db.ref('handles/' + h).once('value');
+        if(!snap.exists()) return alert("Пользователь не найден!");
+        
+        const uid = snap.val();
+        const uSnap = await db.ref('users/' + uid).once('value');
+        
+        if(uSnap.exists()) {
+            localStorage.setItem('liquid_pro_v32', JSON.stringify(uSnap.val()));
+            location.reload();
+        } else {
+            alert("Данные пользователя не найдены в базе.");
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Ошибка входа: " + e.message);
+    }
 }
 
        async function initApp() {
@@ -526,6 +456,30 @@ function enterMessenger(user) {
         const isPrivileged = (me.handle === '@artem' || me.isAdmin === true);
         const techScreen = document.getElementById('screen-tech');
         if(techScreen) techScreen.style.display = (isBreak && !isPrivileged) ? 'flex' : 'none';
+    });
+
+// Слушатель ОБЪЯВЛЕНИЯ (Блокировка)
+    db.ref('settings/announcement').on('value', snap => {
+        const data = snap.val();
+        const screen = document.getElementById('screen-announcement');
+        const textElem = document.getElementById('announcement-display-text');
+        if (data && data.active) {
+            textElem.innerText = data.text;
+            screen.style.display = 'flex';
+        } else {
+            screen.style.display = 'none';
+        }
+    });
+
+    // Слушатель РАССЫЛКИ
+    db.ref('settings/broadcast').on('value', snap => {
+        const data = snap.val();
+        if (data && data.id !== localStorage.getItem('last_broadcast_id')) {
+            document.getElementById('broadcast-display-text').innerText = data.text;
+            document.getElementById('screen-broadcast').style.display = 'flex';
+            // Сохраняем ID, чтобы показать только один раз
+            window.currentBroadcastId = data.id;
+        }
     });
 
     listenToFriends(); 
@@ -907,25 +861,25 @@ function showAdminPanel() {
     <div id="admin-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:100000;display:flex;align-items:center;justify-content:center;">
         <div style="background:#111827;width:95%;max-width:900px;height:90vh;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;">
             <div style="padding:15px 20px;background:#1e2937;display:flex;justify-content:space-between;align-items:center;">
-                <h2 style="margin:0;color:#00f2fe;">Админ-панель — @artem</h2>
+                <h2 style="margin:0;color:#00f2fe;">Админ-панель</h2>
                 <button onclick="document.getElementById('admin-modal').remove()" style="background:none;border:none;color:#ff5555;font-size:24px;cursor:pointer;">✕</button>
             </div>
             <div style="display:flex;height:calc(100% - 60px);">
-                <!-- Левое меню -->
-                <div style="width:220px;background:#1e2937;padding:20px 10px;">
-                    <div onclick="showAdminSection(1)" class="admin-tab active" style="padding:12px 15px;margin:5px 0;border-radius:10px;cursor:pointer;">Выдать галочку</div>
-                    <div onclick="showAdminSection(2)" class="admin-tab" style="padding:12px 15px;margin:5px 0;border-radius:10px;cursor:pointer;">Администраторы</div>
-                    <div onclick="showAdminSection(3)" class="admin-tab" style="padding:12px 15px;margin:5px 0;border-radius:10px;cursor:pointer;">Технический перерыв</div>
-                    <div onclick="showAdminSection(4)" class="admin-tab" style="padding:12px 15px;margin:5px 0;border-radius:10px;cursor:pointer;">Удаление аккаунта</div>
+                <div style="width:220px;background:#1e2937;padding:20px 10px; overflow-y:auto;">
+                    <div onclick="showAdminSection(1)" class="admin-tab">Галочки</div>
+                    <div onclick="showAdminSection(2)" class="admin-tab">Админы</div>
+                    <div onclick="showAdminSection(3)" class="admin-tab">Техперерыв</div>
+                    <div onclick="showAdminSection(5)" class="admin-tab" style="color:#00f2fe">📢 Объявление</div>
+                    <div onclick="showAdminSection(6)" class="admin-tab" style="color:#00f2fe">✉️ Рассылка</div>
+                    <div onclick="showAdminSection(4)" class="admin-tab">Удаление</div>
                 </div>
-                <!-- Правая часть -->
-                <div id="admin-content" style="flex:1;padding:20px;overflow-y:auto;"></div>
+                <div id="admin-content" style="flex:1;padding:25px;overflow-y:auto;"></div>
             </div>
         </div>
     </div>`;
 
     document.body.insertAdjacentHTML('beforeend', adminHTML);
-    showAdminSection(1); // открываем первый раздел по умолчанию
+    showAdminSection(1);
 }
 
 // === ФУНКЦИИ АДМИН-ПАНЕЛИ ===
@@ -944,6 +898,22 @@ function showAdminSection(section) {
     } else if (section === 4) {
         content.innerHTML = `<h3>Удаление аккаунта</h3><input type="text" placeholder="Поиск" style="width:100%;padding:10px;margin-bottom:15px;" onkeyup="searchUsersAdmin(this.value,4)"> <div id="admin-users-list"></div>`;
         loadAllUsers(4);
+    } else if (section === 5) {
+        content.innerHTML = `
+            <h3>Глобальное объявление</h3>
+            <p><small>Это заблокирует экран у всех пользователей.</small></p>
+            <textarea id="admin-ann-text" placeholder="Текст объявления..." style="height:150px; margin-bottom:15px;"></textarea>
+            <div style="display:flex; gap:10px;">
+                <button onclick="updateAnnouncement(true)" style="background:#00cc00; flex:1; padding:15px; border-radius:12px; color:black; font-weight:bold;">ВКЛЮЧИТЬ У ВСЕХ</button>
+                <button onclick="updateAnnouncement(false)" style="background:#ff4444; flex:1; padding:15px; border-radius:12px; color:white; font-weight:bold;">ВЫКЛЮЧИТЬ</button>
+            </div>
+            <p style="margin-top:15px; color:#888;">Ссылка на поддержку: https://t.me/Artem_8894</p>`;
+    } else if (section === 6) {
+        content.innerHTML = `
+            <h3>Рассылка сообщения</h3>
+            <p><small>Появится как окно с кнопкой "Понятно".</small></p>
+            <textarea id="admin-brd-text" placeholder="Текст сообщения..." style="height:150px; margin-bottom:15px;"></textarea>
+            <button onclick="sendGlobalBroadcast()" style="background:var(--accent); width:100%; padding:15px; border-radius:12px; color:black; font-weight:bold;">ОТПРАВИТЬ ВСЕМ</button>`;
     }
 }
 
@@ -1063,6 +1033,30 @@ async function removeChat() {
     }
 }
 
+// Закрытие окна рассылки
+function closeBroadcast() {
+    if (window.currentBroadcastId) {
+        localStorage.setItem('last_broadcast_id', window.currentBroadcastId);
+    }
+    document.getElementById('screen-broadcast').style.display = 'none';
+}
+
+// Управление Объявлением (Вкл/Выкл)
+async function updateAnnouncement(active) {
+    const text = document.getElementById('admin-ann-text').value;
+    if (active && !text) return alert("Введите текст объявления!");
+    await db.ref('settings/announcement').set({ active: active, text: text || "" });
+    alert(active ? "Объявление включено!" : "Объявление выключено!");
+}
+
+// Отправка Рассылки (Понятно)
+async function sendGlobalBroadcast() {
+    const text = document.getElementById('admin-brd-text').value;
+    if (!text) return alert("Введите текст!");
+    await db.ref('settings/broadcast').set({ id: Date.now().toString(), text: text });
+    alert("Рассылка отправлена!");
+}
+
 // --- ЗАПУСК ПРИЛОЖЕНИЯ ---
 window.onload = () => {
     const sUser = localStorage.getItem('liquid_pro_v32');
@@ -1104,4 +1098,19 @@ window.onload = () => {
     <a href="https://t.me/Artem_8894" target="_blank" style="background:#00f2fe; color:#000; padding:14px 30px; border-radius:15px; text-decoration:none; font-weight:bold; font-size:18px;">Поддержка</a>
 </div>
 </body>
+<!-- Плашка Объявления (Блокирующая) -->
+<div id="screen-announcement" style="display:none; position:fixed; inset:0; background:rgba(11, 17, 29, 0.98); backdrop-filter:blur(25px); z-index:999999; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:30px;">
+    <div style="font-size:60px; margin-bottom:20px;">📢</div>
+    <h2 style="color:white; margin-bottom:15px;">ВАЖНОЕ ОБЪЯВЛЕНИЕ</h2>
+    <p id="announcement-display-text" style="color:#fff; font-size:18px; line-height:1.5; margin-bottom:30px; max-width:400px;"></p>
+    <a href="https://t.me/Artem_8894" target="_blank" style="background:var(--accent); color:#000; padding:14px 40px; border-radius:15px; text-decoration:none; font-weight:bold; font-size:16px;">ПОДДЕРЖКА</a>
+
+
+<!-- Плашка Рассылки (Модальное окно) -->
+<div id="screen-broadcast" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(10px); z-index:999997; align-items:center; justify-content:center; padding:20px;">
+    <div class="glass" style="max-width:350px; width:100%; padding:30px; text-align:center; border: 1px solid var(--accent);">
+        <div style="font-size:40px; margin-bottom:15px;">✉️</div>
+        <p id="broadcast-display-text" style="color:white; font-size:16px; margin-bottom:25px; white-space: pre-wrap;"></p>
+        <button onclick="closeBroadcast()" style="background:var(--accent); color:#000; width:100%; padding:12px; border-radius:12px; font-weight:bold;">Понятно</button>
+</div>
 </html>   

@@ -188,41 +188,40 @@
     </div>
 
     <!-- AUTH PAGE -->
-    <div id="auth-page" class="full-screen">
+    <div id="auth-page">
         <div class="glass auth-card">
             <h1 style="color:var(--accent); margin-bottom:25px; font-size:32px;">Vibe</h1>
             
-            <!-- ТАБЫ -->
-            <div class="auth-tabs" style="display: flex; gap: 10px; margin-bottom: 25px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 16px;">
-                <div class="auth-tab active" id="tab-l" onclick="changeAuthTab('login')" style="flex: 1; padding: 12px; border-radius: 12px; cursor: pointer; text-align: center;">Вход</div>
-                <div class="auth-tab" id="tab-r" onclick="changeAuthTab('reg')" style="flex: 1; padding: 12px; border-radius: 12px; cursor: pointer; text-align: center;">Регистрация</div>
+            <!-- ВКЛАДКИ -->
+            <div class="auth-tabs">
+                <div class="auth-tab active" id="tab-l" onclick="changeAuthTab('login')">Вход</div>
+                <div class="auth-tab" id="tab-r" onclick="changeAuthTab('reg')">Регистрация</div>
             </div>
 
-            <!-- ШАГ 1: ТЕЛЕФОН + ЮЗЕР (ДЛЯ ВХОДА) -->
-            <div id="step-1">
-                <div id="login-extra-field">
+            <!-- ШАГ 1: ТЕЛЕФОН / НИК -->
+            <div id="step-auth-1">
+                <div id="login-fields-area">
                     <input type="text" id="auth-handle-link" placeholder="@username (для старых аккаунтов)">
-                    <p style="font-size: 10px; opacity: 0.5; margin-bottom: 10px;">Введи ник ОДИН РАЗ для привязки телефона</p>
+                    <p style="font-size: 10px; opacity: 0.5; margin-bottom: 15px;">Введите ник ОДИН РАЗ для привязки телефона</p>
                 </div>
                 
-                <input type="tel" id="auth-phone" value="+7" oninput="fixPhone(this)">
-                <button onclick="sendSMSCode()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px;">ОТПРАВИТЬ КОД</button>
+                <input type="tel" id="auth-phone" value="+7" oninput="if(!this.value.startsWith('+7'))this.value='+7'; this.value=this.value.replace(/[^\d+]/g,'');">
+                <button onclick="sendSMSCode()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 15px;">ОТПРАВИТЬ КОД</button>
             </div>
 
-            <!-- ШАГ 2: КОД -->
-            <div id="step-2" style="display:none;">
-                <p style="font-size: 13px; opacity: 0.7; margin-bottom: 10px;">Код из СМС</p>
-                <input type="number" id="auth-otp" placeholder="000000">
-                <button onclick="checkOTPCode()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px;">ПОДТВЕРДИТЬ</button>
+            <!-- ШАГ 2: ВВОД КОДА (Скрыт) -->
+            <div id="step-auth-2" style="display:none;">
+                <p style="font-size: 13px; margin-bottom: 10px;">Код из СМС</p>
+                <input type="number" id="auth-otp" placeholder="000000" style="text-align:center; font-size:20px; letter-spacing:5px;">
+                <button onclick="verifySMSCode()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 15px;">ПОДТВЕРДИТЬ</button>
             </div>
 
-            <!-- ШАГ 3: ДАННЫЕ РЕГИСТРАЦИИ -->
-            <div id="step-3" style="display:none;">
-                <h2 style="font-size: 18px; margin-bottom: 15px;">Новый профиль</h2>
-                <input type="text" id="reg-emoji" placeholder="😊" maxlength="2" style="font-size:30px; text-align:center; width: 80px; margin: 0 auto 10px; display: block; background: rgba(255,255,255,0.1);">
+            <!-- ШАГ 3: РЕГИСТРАЦИЯ (Скрыт) -->
+            <div id="step-auth-3" style="display:none;">
+                <input type="text" id="reg-emoji" placeholder="😊" maxlength="2" style="font-size:30px; text-align:center; width:80px; margin:0 auto 10px; display:block;">
                 <input type="text" id="reg-name" placeholder="Твое Имя">
                 <input type="text" id="reg-handle" placeholder="@username">
-                <button onclick="completeRegistration()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px;">ЗАВЕРШИТЬ</button>
+                <button onclick="registerNewUser()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px;">ЗАВЕРШИТЬ</button>
             </div>
         </div>
     </div>
@@ -391,109 +390,94 @@ function mobTab(id) {
 
         const auth = firebase.auth();
 let confirmResult = null;
-let currentPhone = "";
 let authMode = "login";
+let userPhoneNumber = "";
 
-// Фикс телефона: всегда +7
-function fixPhone(el) {
-    if (!el.value.startsWith('+7')) el.value = '+7';
-    el.value = el.value.replace(/[^\d+]/g, ''); // только цифры и +
-}
-
-// Переключение вкладок
+// Исправленное переключение вкладок
 function changeAuthTab(mode) {
     authMode = mode;
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('tab-' + (mode === 'login' ? 'l' : 'r')).classList.add('active');
-    
-    // Показываем поле ника только если это вход
-    document.getElementById('login-extra-field').style.display = (mode === 'login' ? 'block' : 'none');
+    document.getElementById('tab-l').classList.toggle('active', mode === 'login');
+    document.getElementById('tab-r').classList.toggle('active', mode === 'reg');
+    document.getElementById('login-fields-area').style.display = (mode === 'login' ? 'block' : 'none');
 }
 
 // Отправка СМС
 function sendSMSCode() {
-    const ph = document.getElementById('auth-phone').value.trim();
-    if (ph.length < 11) return alert("Введите полный номер!");
+    const phone = document.getElementById('auth-phone').value.trim();
+    if (phone.length < 12) return alert("Введите номер целиком!");
     
-    currentPhone = ph;
+    userPhoneNumber = phone;
     window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
 
-    auth.signInWithPhoneNumber(ph, window.recaptchaVerifier).then(res => {
+    auth.signInWithPhoneNumber(phone, window.recaptchaVerifier).then(res => {
         confirmResult = res;
-        document.getElementById('step-1').style.display = 'none';
-        document.getElementById('step-2').style.display = 'block';
-    }).catch(err => alert("Ошибка Firebase: " + err.message));
+        document.getElementById('step-auth-1').style.display = 'none';
+        document.getElementById('step-auth-2').style.display = 'block';
+    }).catch(err => alert("Ошибка СМС: " + err.message));
 }
 
-// Проверка кода
-async function checkOTPCode() {
-    const code = document.getElementById('auth-otp').value;
-    if (!code) return alert("Введите код!");
+// Проверка кода и моментальный вход
+async function verifySMSCode() {
+    const otp = document.getElementById('auth-otp').value;
+    if (!otp) return alert("Введите код!");
 
-    confirmResult.confirm(code).then(async (result) => {
-        const pKey = currentPhone.replace('+', '');
+    confirmResult.confirm(otp).then(async (result) => {
+        const pKey = userPhoneNumber.replace('+', '');
         const phoneSnap = await db.ref('phones/' + pKey).once('value');
 
         if (phoneSnap.exists()) {
-            // ЕСЛИ НОМЕР УЖЕ ЕСТЬ - СРАЗУ ВХОДИМ
+            // Если уже привязан - входим сразу
             const uid = phoneSnap.val();
             const uSnap = await db.ref('users/' + uid).once('value');
-            finishAuthProcess(uSnap.val());
+            saveAndEnter(uSnap.val());
         } else {
-            // ЕСЛИ НОМЕРА НЕТ
+            // Если новый номер
             if (authMode === 'login') {
-                // Пытаемся связать со старым ником
                 const handle = document.getElementById('auth-handle-link').value.trim().replace('@','').toLowerCase();
                 if (!handle) {
-                    alert("Этот номер не привязан. Введи свой @ник для связки!");
-                    location.reload(); 
-                    return;
+                    alert("Введите ваш @username для привязки!");
+                    location.reload(); return;
                 }
                 const hSnap = await db.ref('handles/' + handle).once('value');
-                if (!hSnap.exists()) return alert("Ник не найден в базе!");
+                if (!hSnap.exists()) return alert("Аккаунт не найден!");
                 
                 const uid = hSnap.val();
-                await db.ref(`users/${uid}/phone`).set(currentPhone);
+                await db.ref(`users/${uid}/phone`).set(userPhoneNumber);
                 await db.ref(`phones/${pKey}`).set(uid);
                 const uSnap = await db.ref('users/' + uid).once('value');
-                finishAuthProcess(uSnap.val());
+                saveAndEnter(uSnap.val());
             } else {
-                // Идем на регистрацию
-                document.getElementById('step-2').style.display = 'none';
-                document.getElementById('step-3').style.display = 'block';
+                // Идем к вводу Имени/Ника
+                document.getElementById('step-auth-2').style.display = 'none';
+                document.getElementById('step-auth-3').style.display = 'block';
             }
         }
     }).catch(err => alert("Неверный код!"));
 }
 
-// Создание нового аккаунта
-async function completeRegistration() {
+// Регистрация нового
+async function registerNewUser() {
     const name = document.getElementById('reg-name').value.trim();
     const handle = document.getElementById('reg-handle').value.trim().replace('@','').toLowerCase();
     const emoji = document.getElementById('reg-emoji').value || '😊';
-    const pKey = currentPhone.replace('+', '');
+    const pKey = userPhoneNumber.replace('+', '');
 
-    if (!name || !handle) return alert("Заполни все поля!");
+    if (!name || !handle) return alert("Заполните все поля!");
     const hSnap = await db.ref('handles/' + handle).once('value');
-    if (hSnap.exists()) return alert("Этот ник уже занят!");
+    if (hSnap.exists()) return alert("Ник занят!");
 
     const id = Math.random().toString(36).substr(2, 6).toUpperCase();
-    const newUser = { 
-        id, name, handle: '@' + handle, 
-        avatar: emoji, phone: currentPhone, 
-        online: true, bio: "Я в Vibe!" 
-    };
+    const newUser = { id, name, handle: '@' + handle, avatar: emoji, phone: userPhoneNumber, online: true, bio: "Я в Vibe!" };
 
     await db.ref('users/' + id).set(newUser);
     await db.ref('handles/' + handle).set(id);
     await db.ref('phones/' + pKey).set(id);
-
-    finishAuthProcess(newUser);
+    saveAndEnter(newUser);
 }
 
-function finishAuthProcess(user) {
+function saveAndEnter(user) {
     localStorage.setItem('liquid_pro_v32', JSON.stringify(user));
-    location.reload(); // Перекидывает в мессенджер
+    location.reload(); 
 }
 
        async function initApp() {

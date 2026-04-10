@@ -189,37 +189,47 @@
 
     <!-- AUTH PAGE -->
     <!-- AUTH PAGE -->
-    <div id="auth-page">
+    <!-- AUTH PAGE -->
+    <div id="auth-page" class="full-screen">
         <div class="glass auth-card">
             <h1 style="color:var(--accent); margin-bottom:25px; font-size:32px;">Vibe</h1>
-            <div class="auth-tabs" id="auth-tabs-container">
-                <div class="auth-tab active" id="tab-l" onclick="switchAuth('login')">Вход</div>
-                <div class="auth-tab" id="tab-r" onclick="switchAuth('reg')">Регистрация</div>
+            
+            <!-- ВКЛАДКИ -->
+            <div class="auth-tabs" id="auth-tabs-container" style="display: flex; gap: 10px; margin-bottom: 25px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 16px;">
+                <div class="auth-tab active" id="tab-l" onclick="switchAuth('login')" style="flex: 1; padding: 12px; border-radius: 12px; cursor: pointer; text-align: center;">Вход</div>
+                <div class="auth-tab" id="tab-r" onclick="switchAuth('reg')" style="flex: 1; padding: 12px; border-radius: 12px; cursor: pointer; text-align: center;">Регистрация</div>
             </div>
 
-            <!-- Сюда вводит ник ТОЛЬКО старый юзер для привязки -->
-            <div id="handle-check-area">
-                <input type="text" id="auth-handle" placeholder="@username (для старых аккаунтов)">
-                <p style="font-size:10px; opacity:0.6; margin: 5px 0 15px;">Если у вас уже был аккаунт, введите ник для переноса</p>
+            <!-- ШАГ 1: ВВОД ТЕЛЕФОНА -->
+            <div id="step-phone">
+                <p id="phone-label" style="font-size: 13px; opacity: 0.7; margin-bottom: 10px;">Введите номер для входа</p>
+                <input type="tel" id="main-phone-input" placeholder="900 123-45-67" oninput="if(this.value.startsWith('9')) this.value = '+7' + this.value">
+                <button onclick="sendSMS()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px;">ОТПРАВИТЬ КОД</button>
             </div>
 
-            <div id="phone-area">
-                <input type="tel" id="auth-phone" placeholder="+79001234567">
-                <button id="send-code-btn" onclick="processPhoneAuth()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px;">ОТПРАВИТЬ КОД</button>
+            <!-- ШАГ 2: ВВОД СМС-КОДА -->
+            <div id="step-otp" style="display:none;">
+                <p style="font-size: 13px; opacity: 0.7; margin-bottom: 10px;">Код из СМС</p>
+                <input type="number" id="main-otp-input" placeholder="000000">
+                <button onclick="verifySMS()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px;">ПОДТВЕРДИТЬ</button>
             </div>
 
-            <div id="otp-area" style="display:none;">
-                <input type="number" id="auth-otp" placeholder="Код из СМС">
-                <button onclick="verifyOtp()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px;">ПОДТВЕРДИТЬ</button>
-            </div>
-
-            <div id="reg-fields" style="display:none; margin-top: 10px;">
-                <input type="text" id="r-e-input" placeholder="😊" maxlength="2" style="font-size:30px; text-align:center;">
-                <input type="text" id="r-n-input" placeholder="Имя">
-                <input type="text" id="r-h-new" placeholder="@username (новый)">
+            <!-- ШАГ 3: РЕГИСТРАЦИЯ / СВЯЗКА -->
+            <div id="step-reg" style="display:none;">
+                <h2 style="font-size: 18px; margin-bottom: 15px;">Создание профиля</h2>
+                <p id="reg-msg" style="font-size:11px; margin-bottom:15px; color:var(--accent); opacity: 0.8;"></p>
+                
+                <!-- ПОЛЕ ДЛЯ ЭМОДЗИ -->
+                <input type="text" id="reg-emoji" placeholder="😊" maxlength="2" 
+                       style="font-size:30px; text-align:center; width: 80px; margin: 0 auto 10px; display: block; background: rgba(255,255,255,0.05); border: 1px solid var(--accent);">
+                
+                <input type="text" id="reg-name" placeholder="Ваше Имя">
+                <input type="text" id="reg-handle" placeholder="@username">
+                <button onclick="finishAuth()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top: 10px;">ЗАВЕРШИТЬ</button>
             </div>
         </div>
     </div>
+    <div id="recaptcha-container"></div>
 
     <!-- ПК -->
     <div id="pc-layout">
@@ -430,6 +440,7 @@ function verifySMS() {
 async function finishAuth() {
     const handle = document.getElementById('reg-handle').value.trim().replace('@','').toLowerCase();
     const name = document.getElementById('reg-name').value.trim();
+    const emoji = document.getElementById('reg-emoji').value || '😊'; // ПОЛУЧАЕМ ЭМОДЗИ
     const pKey = userPhone.replace('+', '');
 
     if (!handle) return alert("Введите ник!");
@@ -437,21 +448,24 @@ async function finishAuth() {
     const handleSnap = await db.ref('handles/' + handle).once('value');
 
     if (handleSnap.exists()) {
-        // СВЯЗКА: Ник найден, привязываем новый телефон к старому профилю
+        // СВЯЗКА: (тут код без изменений)
         const uid = handleSnap.val();
         await db.ref(`users/${uid}/phone`).set(userPhone);
         await db.ref(`phones/${pKey}`).set(uid);
         const uSnap = await db.ref('users/' + uid).once('value');
         completeLogin(uSnap.val());
     } else {
-        // РЕГИСТРАЦИЯ: Ник новый, создаем аккаунт с нуля
+        // РЕГИСТРАЦИЯ НОВОГО
         if (!name) return alert("Введите имя для нового аккаунта");
         const id = Math.random().toString(36).substr(2, 6).toUpperCase();
+        
+        // Добавляем эмодзи в объект пользователя
         const newUser = { 
-            id, name, 
+            id, 
+            name, 
             handle: '@' + handle, 
+            avatar: emoji, // СОХРАНЯЕМ ЭМОДЗИ
             phone: userPhone, 
-            avatar: '👤', 
             online: true, 
             bio: "Я в Vibe!",
             verified: false 

@@ -559,23 +559,26 @@ async function login() {
         }
     });
 
-    // Слушатель РАССЫЛКИ (Моментальное появление у всех, кроме @artem)
+    // Слушатель РАССЫЛКИ (Моментально и для тех, кто зашел позже)
     db.ref('settings/broadcast').on('value', snap => {
         const data = snap.val();
-        // Если данных нет, или это Артем — ничего не показываем
-        if (!data || !data.id || me.handle === '@artem') return;
+        
+        // 1. Проверяем наличие данных
+        // 2. Артем (админ) не должен видеть свои же рассылки
+        if (!data || !data.id || (me && me.handle === '@artem')) return;
 
+        // Получаем ID последней прочитанной этим пользователем рассылки
         const lastSeenId = localStorage.getItem('last_broadcast_id');
         
-        // Если ID новый — показываем плашку моментально
+        // Если ID в базе новый (не совпадает с сохраненным в телефоне)
         if (data.id !== lastSeenId) {
             const brdScreen = document.getElementById('screen-broadcast');
             const brdText = document.getElementById('broadcast-display-text');
             
             if (brdScreen && brdText) {
-                brdText.innerText = data.text;
-                brdScreen.style.display = 'flex';
-                window.currentBroadcastId = data.id; 
+                brdText.innerText = data.text; // Вставляем текст из базы
+                brdScreen.style.display = 'flex'; // Показываем плашку
+                window.currentBroadcastId = data.id; // Запоминаем текущий ID в памяти сессии
             }
         }
     });
@@ -1157,6 +1160,7 @@ async function removeChat() {
 // Закрытие окна рассылки
 function closeBroadcast() {
     if (window.currentBroadcastId) {
+        // Сохраняем ID рассылки как "прочитанную" навсегда для этого устройства
         localStorage.setItem('last_broadcast_id', window.currentBroadcastId);
     }
     document.getElementById('screen-broadcast').style.display = 'none';
@@ -1172,16 +1176,21 @@ async function updateAnnouncement(active) {
 
 async function sendGlobalBroadcast() {
     const text = document.getElementById('admin-brd-text').value;
-    if (!text) return alert("Введите текст!");
+    if (!text) return alert("Введите текст сообщения!");
     
-    // Создаем абсолютно новый ID на основе времени
-    const newId = "msg_" + Date.now(); 
+    // Создаем уникальный ID рассылки на основе времени
+    const newBroadcastId = "bc_" + Date.now();
     
-    await db.ref('settings/broadcast').set({
-        id: newId,
-        text: text
-    });
-    alert("Рассылка отправлена моментально!");
+    try {
+        await db.ref('settings/broadcast').set({
+            id: newBroadcastId,
+            text: text
+        });
+        alert("Рассылка успешно отправлена!");
+        document.getElementById('admin-brd-text').value = ""; // Очищаем поле
+    } catch (e) {
+        alert("Ошибка: " + e.message);
+    }
 }
 
 // --- ЗАПУСК ПРИЛОЖЕНИЯ ---

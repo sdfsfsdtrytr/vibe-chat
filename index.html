@@ -55,9 +55,41 @@
         .menu-item { padding: 12px 15px; font-size: 13px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); color: white; display: flex; align-items: center; gap: 10px; }
         .menu-item:hover { background: var(--accent); color: black; }
 
-        /* Ответ в чате */
-        .reply-bar-ui { background: rgba(0,0,0,0.3); border-left: 3px solid var(--accent); padding: 10px 15px; margin: 0 15px; border-radius: 10px; display: none; align-items: center; justify-content: space-between; }
-        .reply-quote { font-size: 11px; background: rgba(255,255,255,0.08); padding: 5px 10px; border-radius: 8px; margin-bottom: 5px; border-left: 3px solid var(--accent); opacity: 0.8; }
+       /* Ответ в чате (Панель над вводом) */
+        .reply-bar-ui { 
+            background: rgba(0, 0, 0, 0.3); 
+            border-left: 4px solid #a855f7; 
+            padding: 10px 15px; 
+            margin: 0 15px; 
+            border-radius: 10px; 
+            display: none; 
+            align-items: center; 
+            justify-content: space-between; 
+            margin-bottom: 5px;
+        }
+
+        /* Плашка ответа ВНУТРИ сообщения (как на фото) */
+.reply-quote { 
+    font-size: 13px; 
+    background: rgba(0, 0, 0, 0.25); /* Темный фон */
+    padding: 8px 12px; 
+    border-radius: 8px; 
+    margin-bottom: 8px; 
+    border-left: 4px solid #a855f7; /* Фиолетовая полоска */
+    display: block;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.4;
+    text-align: left;
+}
+
+/* Имя того, кому отвечаем */
+.reply-quote b { 
+    color: #a855f7; 
+    display: block; 
+    font-size: 12px; 
+    margin-bottom: 2px;
+    font-weight: bold;
+}
 
         /* Галочка */
         .verified-badge { width: 16px; height: 16px; vertical-align: middle; margin-left: 6px; display: inline-flex; position: relative; }
@@ -294,9 +326,63 @@
         </div>
     </div>
 
-    <script>       
-          
-// 1. Настройки твоего Firebase
+    <script> 
+
+// Закрытие всех меню при клике в любое место
+window.addEventListener('click', () => {
+    document.getElementById('context-menu').style.display = 'none';
+    document.getElementById('chat-list-menu').style.display = 'none';
+});
+
+// Исправленный показ меню сообщений
+function showMsgMenu(e, id, text, sender) {
+    e.preventDefault();
+    e.stopPropagation(); // Чтобы меню не закрылось сразу от клика выше
+    selectedMsgId = id;
+    selectedMsgText = text;
+    const m = document.getElementById('context-menu');
+    m.style.display = 'block';
+    m.style.left = e.pageX + 'px';
+    m.style.top = e.pageY + 'px';
+    // Показываем "Удалить у всех" только если сообщение моё
+    document.getElementById('btn-del-all').style.display = sender === me.id ? 'flex' : 'none';
+}
+
+// Исправленная отправка текста (теперь с поддержкой ответов)
+async function sendText(mode) {
+    const inp = document.getElementById(mode + '-input');
+    if (!inp || !inp.value || !activePeer) return;
+    if (activePeer.isDeleted) return alert("Пользователь удалён");
+    if (me.blocks && me.blocks[activePeer.id]) return alert("Разблокируйте пользователя");
+
+    const rid = me.id < activePeer.id ? me.id + '_' + activePeer.id : activePeer.id + '_' + me.id;
+    
+    const msgData = {
+        sender: me.id,
+        val: inp.value,
+        time: Date.now()
+    };
+
+    // Если мы отвечаем на сообщение
+    if (replyingTo) {
+        msgData.reply = true;
+        msgData.replyText = replyingTo.text;
+        msgData.replyFrom = replyingTo.from;
+        cancelReply(); // Прячем панель ответа
+    }
+
+    await db.ref('chats/' + rid).push(msgData);
+    inp.value = "";
+}
+
+function logout() {
+    if(confirm("Вы точно хотите выйти из аккаунта?")) {
+        localStorage.clear();
+        location.reload();
+    }
+}
+      
+          // 1. Настройки твоего Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyAcs0ELY176L-d0qLZlpj1aJcej2b8fdPI",
     authDomain: "vtcty-6c839.firebaseapp.com",
@@ -625,97 +711,88 @@ function openPCChat(user) {
     startChatListener(user.id, 'pc');
 }
        function startChatListener(peerId, mode) {
+    if (!me || !peerId) return;
     const rid = me.id < peerId ? me.id + '_' + peerId : peerId + '_' + me.id;
+    const win = document.getElementById(mode + '-msgs');
+    if (!win) return;
+    
+    win.innerHTML = "";
     db.ref('chats/' + rid).off();
 
-    // Запоминаем последнее уведомлённое сообщение для этого чата
-    if (!window.lastNotifiedIds) window.lastNotifiedIds = {};
-    let lastNotifiedId = window.lastNotifiedIds[rid] || null;
-
-    // Сначала загружаем все существующие сообщения (один раз) и рендерим их БЕЗ уведомлений
-    db.ref('chats/' + rid).once('value', (snap) => {
-        if (!snap.exists()) return;
-
-        const win = document.getElementById(mode + '-msgs');
-        win.innerHTML = "";
-
-        Object.entries(snap.val()).forEach(([id, m]) => {
-            if (me.deletedMsgs && me.deletedMsgs[id]) return;
-
-            const d = document.createElement('div');
-            d.className = `msg ${m.sender === me.id ? 'sent' : 'received'}`;
-
-            if (m.reply) d.innerHTML = `<div class="reply-quote"><b>${m.replyFrom}:</b><br>${m.replyText}</div>`;
-            if (m.type === 'voice') d.innerHTML += `🎤 <audio controls src="${m.val}"></audio>`;
-            else d.innerHTML += m.val;
-
-            d.oncontextmenu = (e) => showMsgMenu(e, id, m.val, m.sender);
-            win.appendChild(d);
-
-            // Обновляем последнее сообщение (чтобы знать, где закончилась история)
-            lastNotifiedId = id;
-        });
-
-        win.scrollTop = win.scrollHeight;
-        window.lastNotifiedIds[rid] = lastNotifiedId;
-    });
-
-    // Теперь слушаем ТОЛЬКО новые добавленные сообщения и показываем уведомление
+    // 1. Загрузка истории и новых сообщений
     db.ref('chats/' + rid).on('child_added', (snap) => {
         const id = snap.key;
         const m = snap.val();
-
         if (me.deletedMsgs && me.deletedMsgs[id]) return;
 
-        // Пропускаем сообщения, которые уже были при начальной загрузке
-        if (id === lastNotifiedId) return;
+        // Найди эти строки внутри startChatListener (в обоих местах: once и on child_added)
+// и замени на этот блок кода:
 
-        // Рендерим новое сообщение
-        const win = document.getElementById(mode + '-msgs');
-        const d = document.createElement('div');
-        d.className = `msg ${m.sender === me.id ? 'sent' : 'received'}`;
+const d = document.createElement('div');
+d.className = `msg ${m.sender === me.id ? 'sent' : 'received'}`;
+d.id = "msg-" + id;
 
-        if (m.reply) d.innerHTML = `<div class="reply-quote"><b>${m.replyFrom}:</b><br>${m.replyText}</div>`;
-        if (m.type === 'voice') d.innerHTML += `🎤 <audio controls src="${m.val}"></audio>`;
-        else d.innerHTML += m.val;
+let messageHTML = "";
 
-        d.oncontextmenu = (e) => showMsgMenu(e, id, m.val, m.sender);
+// ПРОВЕРКА: Если в сообщении есть данные об ответе — рисуем плашку
+if (m.reply) {
+    // Рисуем имя жирным фиолетовым и текст под ним (как на фото)
+    messageHTML += `
+        <div class="reply-quote">
+            <b>${m.replyFrom}</b>
+            ${m.replyText}
+        </div>`;
+}
+
+// Добавляем основной текст сообщения
+if (m.type === 'voice') {
+    messageHTML += `🎤 <audio controls src="${m.val}"></audio>`;
+} else {
+    messageHTML += `<div>${m.val}</div>`;
+}
+
+d.innerHTML = messageHTML;
+d.oncontextmenu = (e) => showMsgMenu(e, id, m.val, m.sender);
+        
         win.appendChild(d);
-
         win.scrollTop = win.scrollHeight;
-        document.getElementById('snd-msg').play();
+    });
 
-        // === УВЕДОМЛЕНИЕ ТОЛЬКО НА НОВОЕ СООБЩЕНИЕ ===
-        if (m.sender !== me.id && Notification.permission === "granted") {
-            lastNotifiedId = id;
-            window.lastNotifiedIds[rid] = id;
-
-            const peerName = activePeer ? activePeer.name : "Сообщение";
-
-            new Notification(peerName, {
-                body: m.val || "Новое сообщение",
-                icon: activePeer ? activePeer.avatar : undefined,
-                tag: "new-msg-" + rid,
-                vibrate: [150, 75, 150]
-            });
-        }
+    // 2. СЛУШАТЕЛЬ УДАЛЕНИЯ (Чтобы исчезало моментально у всех)
+    db.ref('chats/' + rid).on('child_removed', (snap) => {
+        const id = snap.key;
+        const el = document.getElementById("msg-" + id);
+        if (el) el.remove(); // Удаляем сообщение с экрана моментально
     });
 }
 
 // --- ФУНКЦИИ ОТПРАВКИ И ПРОФИЛЯ ---
 
 async function sendText(mode) {
-    const inp = document.getElementById(mode + '-input'); 
-    if(!inp || !inp.value || !activePeer) return;
-
-    if(activePeer.isDeleted) return alert("Пользователь удалён, писать нельзя");
-
-    if(me.blocks && me.blocks[activePeer.id]) {
-        return alert("Разблокируйте пользователя, чтобы написать");
-    }
+    const inp = document.getElementById(mode + '-input');
+    if (!inp || !inp.value.trim() || !activePeer) return;
 
     const rid = me.id < activePeer.id ? me.id + '_' + activePeer.id : activePeer.id + '_' + me.id;
-    await db.ref('chats/' + rid).push({ sender: me.id, val: inp.value, time: Date.now() });
+    
+    const msgData = {
+        sender: me.id,
+        val: inp.value.trim(),
+        time: Date.now()
+    };
+
+    // Если мы сейчас в режиме ответа
+    if (replyingTo) {
+        msgData.reply = true;
+        msgData.replyText = replyingTo.text; // Текст старого сообщения
+        msgData.replyFrom = replyingTo.from; // Имя того, кому отвечаем
+        
+        // Сбрасываем режим ответа и скрываем панель над вводом
+        replyingTo = null;
+        document.getElementById('pc-reply-ui').style.display = 'none';
+        document.getElementById('mob-reply-ui').style.display = 'none';
+    }
+
+    await db.ref(`chats/${rid}`).push(msgData);
     inp.value = "";
 }
 
@@ -756,12 +833,21 @@ async function toggleBlock() {
         function showMsgMenu(e, id, text, sender) { e.preventDefault(); selectedMsgId = id; selectedMsgText = text; const m = document.getElementById('context-menu'); m.style.display = 'block'; m.style.left = e.pageX + 'px'; m.style.top = e.pageY + 'px'; document.getElementById('btn-del-all').style.display = sender === me.id ? 'flex' : 'none'; }
         
         function prepareReply() {
-            replyingTo = { text: selectedMsgText, from: activePeer.name };
-            const ui = isPC ? 'pc-reply-ui' : 'mob-reply-ui';
-            const txt = isPC ? 'pc-reply-text' : 'mob-reply-text';
-            document.getElementById(ui).style.display = 'flex';
-            document.getElementById(txt).innerText = selectedMsgText.slice(0, 40) + '...';
-        }
+    if (!selectedMsgId) return;
+    
+    replyingTo = { 
+        text: selectedMsgText, 
+        from: activePeer.name // Имя того, кому отвечаем
+    };
+    
+    const ui = isPC ? 'pc-reply-ui' : 'mob-reply-ui';
+    const txt = isPC ? 'pc-reply-text' : 'mob-reply-text';
+    
+    document.getElementById(ui).style.display = 'flex';
+    document.getElementById(txt).innerText = selectedMsgText;
+    
+    closeAllMenus(); // Закрываем меню после выбора "Ответить"
+}
 
         function cancelReply() { replyingTo = null; document.getElementById('pc-reply-ui').style.display='none'; document.getElementById('mob-reply-ui').style.display='none'; }
         function doCopy() { navigator.clipboard.writeText(selectedMsgText); alert("OK!"); }
@@ -801,14 +887,37 @@ async function toggleBlock() {
             btn.onmouseup = btn.ontouchend = () => { if(mediaRecorder) mediaRecorder.stop(); btn.classList.remove('recording'); };
         }
 
-        async function saveEmoji(m) { const e = document.getElementById('set-emoji-'+m).value; me.avatar = e; await db.ref(`users/${me.id}/avatar`).set(e); localStorage.setItem('liquid_pro_v32', JSON.stringify(me)); updateUI(); }
-        async function saveName(m) {
-    const n = document.getElementById('set-name-'+(m==='pc'?'pc':'in')).value;
+        async function saveEmoji(m) {
+    const id = (m === 'pc') ? 'set-emoji-pc' : 'mob-set-emoji';
+    const e = document.getElementById(id).value.trim();
+    if (!e) return;
+    me.avatar = e;
+    await db.ref(`users/${me.id}/avatar`).set(e);
+    localStorage.setItem('liquid_pro_v32', JSON.stringify(me));
+    updateUI();
+    alert("Эмодзи изменен!");
+}
+
+async function saveName(m) {
+    const id = (m === 'pc') ? 'set-name-pc' : 'mob-set-name-in';
+    const n = document.getElementById(id).value.trim();
+    if (!n) return;
     me.name = n;
     await db.ref(`users/${me.id}/name`).set(n);
     localStorage.setItem('liquid_pro_v32', JSON.stringify(me));
+    updateUI();
+    alert("Имя сохранено!");
 }
-        async function saveBio(m) { const b = document.getElementById('set-bio-'+(m==='pc'?'pc':'in')).value; me.bio = b; await db.ref(`users/${me.id}/bio`).set(b); localStorage.setItem('liquid_pro_v32', JSON.stringify(me)); updateUI(); }
+
+async function saveBio(m) {
+    const id = (m === 'pc') ? 'set-bio-pc' : 'mob-set-bio-in';
+    const b = document.getElementById(id).value.trim();
+    me.bio = b;
+    await db.ref(`users/${me.id}/bio`).set(b);
+    localStorage.setItem('liquid_pro_v32', JSON.stringify(me));
+    updateUI();
+    alert("Описание обновлено!");
+}
         
         function changeTheme(t) { document.body.className = t==='dark'?'':'theme-'+t; localStorage.setItem('theme', t); }
         function pcNav(t) {

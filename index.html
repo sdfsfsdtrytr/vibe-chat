@@ -384,139 +384,94 @@ function mobTab(id) {
 
         const auth = firebase.auth();
 let confirmationResult = null;
-let currentAuthMode = 'login';
-
-// Переключение вкладок Вход/Регистрация
-function switchAuth(t) {
-    currentAuthMode = t;
-    document.getElementById('tab-l').className = t==='login'?'auth-tab active':'auth-tab';
-    document.getElementById('tab-r').className = t==='reg'?'auth-tab active':'auth-tab';
-    // Показываем поле ника только для входа (чтобы связать старый аккаунт)
-    document.getElementById('handle-check-area').style.display = t==='login' ? 'block' : 'none';
-    document.getElementById('reg-fields').style.display = t==='reg' ? 'block' : 'none';
-}
+let userPhone = "";
 
 // 1. ОТПРАВКА СМС
-async function processPhoneAuth() {
-    const phone = document.getElementById('auth-phone').value.trim();
-    const handle = document.getElementById('auth-handle').value.trim().replace('@','').toLowerCase();
+function sendSMS() {
+    const ph = document.getElementById('main-phone-input').value.trim();
+    if (!ph.startsWith('+7')) return alert("Номер должен начинаться с +7 или с 9");
+    userPhone = ph;
 
-    if (!phone.startsWith('+')) return alert("Введите номер в формате +79991234567");
-    
-    // Инициализация невидимой капчи
-    if(!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {'size': 'invisible'});
-    }
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
 
-    // Если это вход по старым данным, проверяем существует ли ник
-    if (currentAuthMode === 'login' && handle !== "") {
-        const snap = await db.ref('handles/' + handle).once('value');
-        if (!snap.exists()) return alert("Пользователь с таким ником не найден!");
-    }
-
-    // Запуск отправки СМС через Firebase
-    auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
-        .then((res) => {
-            confirmationResult = res;
-            // Скрываем ввод телефона, показываем ввод кода
-            document.getElementById('phone-area').style.display = 'none';
-            document.getElementById('handle-check-area').style.display = 'none';
-            document.getElementById('reg-fields').style.display = 'none';
-            document.getElementById('auth-tabs-container').style.display = 'none';
-            document.getElementById('otp-area').style.display = 'block';
-        }).catch((err) => {
-            console.error(err);
-            alert("Ошибка СМС: " + err.message);
-        });
+    auth.signInWithPhoneNumber(ph, window.recaptchaVerifier).then(res => {
+        confirmationResult = res;
+        document.getElementById('step-phone').style.display = 'none';
+        document.getElementById('step-otp').style.display = 'block';
+    }).catch(err => alert("Ошибка: " + err.message));
 }
 
-// 2. ПРОВЕРКА КОДА ИЗ СМС
-async function verifyOtp() {
-    const code = document.getElementById('auth-otp').value;
-    if(!code) return alert("Введите код!");
+// 2. ПРОВЕРКА КОДА
+function verifySMS() {
+    const code = document.getElementById('main-otp-input').value;
+    if(!code) return alert("Введите код из СМС");
 
     confirmationResult.confirm(code).then(async (result) => {
-        const phone = result.user.phoneNumber;
-        if (currentAuthMode === 'login') {
-            await handleLoginFlow(phone);
+        const pKey = userPhone.replace('+', '');
+        
+        // Проверяем, есть ли этот телефон в базе
+        const phoneSnap = await db.ref('phones/' + pKey).once('value');
+        
+        if (phoneSnap.exists()) {
+            // Если номер есть — сразу входим
+            const uid = phoneSnap.val();
+            const uSnap = await db.ref('users/' + uid).once('value');
+            completeLogin(uSnap.val());
         } else {
-            await handleRegisterFlow(phone);
+            // Если номера нет — открываем поля для ника и имени
+            document.getElementById('step-otp').style.display = 'none';
+            document.getElementById('step-reg').style.display = 'block';
+            document.getElementById('reg-msg').innerText = "Введите ник для привязки старого аккаунта или создайте новый";
         }
-    }).catch((err) => {
-        console.error(err);
-        alert("Код неверный или устарел!");
-    });
+    }).catch(err => alert("Неверный код!"));
 }
 
-// 3. ЛОГИКА ВХОДА И СВЯЗКИ (Чтобы не потерять аккаунт)
-async function handleLoginFlow(phone) {
-    const pKey = phone.replace('+', '');
-    // Проверяем, есть ли уже этот телефон в базе
-    const phoneSnap = await db.ref('phones/' + pKey).once('value');
+// 3. ФИНАЛЬНАЯ РЕГИСТРАЦИЯ ИЛИ СВЯЗКА
+async function finishAuth() {
+    const handle = document.getElementById('reg-handle').value.trim().replace('@','').toLowerCase();
+    const name = document.getElementById('reg-name').value.trim();
+    const pKey = userPhone.replace('+', '');
 
-    if (phoneSnap.exists()) {
-        // Телефон уже привязан, просто заходим в профиль
-        const uid = phoneSnap.val();
-        const uSnap = await db.ref('users/' + uid).once('value');
-        loginFinal(uSnap.val());
-    } else {
-        // Телефона нет. Проверяем, ввел ли пользователь ник для связки
-        const handle = document.getElementById('auth-handle').value.trim().replace('@','').toLowerCase();
-        if (!handle) {
-            alert("Ваш номер еще не привязан к аккаунту. Пожалуйста, введите ваш @ник для связки.");
-            location.reload();
-            return;
-        }
+    if (!handle) return alert("Введите ник!");
 
-        const hSnap = await db.ref('handles/' + handle).once('value');
-        if(!hSnap.exists()) return alert("Ник не найден!");
-        
-        const uid = hSnap.val();
-        
-        // Магия связки: записываем номер телефона в старый профиль
-        await db.ref(`users/${uid}/phone`).set(phone);
+    const handleSnap = await db.ref('handles/' + handle).once('value');
+
+    if (handleSnap.exists()) {
+        // СВЯЗКА: Ник найден, привязываем новый телефон к старому профилю
+        const uid = handleSnap.val();
+        await db.ref(`users/${uid}/phone`).set(userPhone);
         await db.ref(`phones/${pKey}`).set(uid);
-        
         const uSnap = await db.ref('users/' + uid).once('value');
-        loginFinal(uSnap.val());
+        completeLogin(uSnap.val());
+    } else {
+        // РЕГИСТРАЦИЯ: Ник новый, создаем аккаунт с нуля
+        if (!name) return alert("Введите имя для нового аккаунта");
+        const id = Math.random().toString(36).substr(2, 6).toUpperCase();
+        const newUser = { 
+            id, name, 
+            handle: '@' + handle, 
+            phone: userPhone, 
+            avatar: '👤', 
+            online: true, 
+            bio: "Я в Vibe!",
+            verified: false 
+        };
+
+        await db.ref('users/' + id).set(newUser);
+        await db.ref('handles/' + handle).set(id);
+        await db.ref('phones/' + pKey).set(id);
+        completeLogin(newUser);
     }
 }
 
-// 4. РЕГИСТРАЦИЯ НОВОГО ПОЛЬЗОВАТЕЛЯ
-async function handleRegisterFlow(phone) {
-    const name = document.getElementById('r-n-input').value.trim();
-    const handle = document.getElementById('r-h-new').value.trim().replace('@','').toLowerCase();
-    const emoji = document.getElementById('r-e-input').value || '😊';
-
-    if (!name || !handle) return alert("Заполните имя и придумайте ник!");
-    
-    // Проверка, не занят ли ник
-    const hSnap = await db.ref('handles/' + handle).once('value');
-    if (hSnap.exists()) return alert("Этот ник уже кем-то занят!");
-
-    const id = Math.random().toString(36).substr(2, 6).toUpperCase();
-    const newUser = { 
-        id, 
-        name, 
-        handle: '@' + handle, 
-        avatar: emoji, 
-        phone: phone, 
-        online: true, 
-        bio: "Я в Vibe!",
-        verified: false
-    };
-
-    // Сохраняем во все таблицы
-    await db.ref('users/' + id).set(newUser);
-    await db.ref('handles/' + handle).set(id);
-    await db.ref('phones/' + phone.replace('+', '')).set(id);
-
-    loginFinal(newUser);
+function completeLogin(user) {
+    localStorage.setItem('liquid_pro_v32', JSON.stringify(user));
+    location.reload();
 }
 
-// Завершение авторизации
-function loginFinal(user) {
-    localStorage.setItem('liquid_pro_v32', JSON.stringify(user));
+// Вспомогательная функция переключения (если кнопки табов остались)
+function switchAuth(t) {
+    // В новой системе мы просто сбрасываем вид на ввод телефона
     location.reload();
 }
 

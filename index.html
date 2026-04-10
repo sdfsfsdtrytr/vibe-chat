@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Vibe</title>
 
-<link rel="manifest" href="/vibe-chat/manifest.json">    
+<link rel="manifest" href="manifest.json">    
     
 <!-- Системные скрипты -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -13,6 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
     <style>
         :root {
@@ -159,6 +160,7 @@
     </style>
 </head>
 <body class="theme-dark">
+<div id="recaptcha-container"></div>
 
     <audio id="snd-msg" src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"></audio>
 
@@ -186,22 +188,35 @@
     </div>
 
     <!-- AUTH PAGE -->
+    <!-- AUTH PAGE -->
     <div id="auth-page">
         <div class="glass auth-card">
             <h1 style="color:var(--accent); margin-bottom:25px; font-size:32px;">Vibe</h1>
-            <div class="auth-tabs">
+            <div class="auth-tabs" id="auth-tabs-container">
                 <div class="auth-tab active" id="tab-l" onclick="switchAuth('login')">Вход</div>
                 <div class="auth-tab" id="tab-r" onclick="switchAuth('reg')">Регистрация</div>
             </div>
-            <div id="form-login">
-                <input type="text" id="l-h-input" placeholder="@username">
-                <button onclick="login()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">ВОЙТИ</button>
+
+            <!-- Сюда вводит ник ТОЛЬКО старый юзер для привязки -->
+            <div id="handle-check-area">
+                <input type="text" id="auth-handle" placeholder="@username (для старых аккаунтов)">
+                <p style="font-size:10px; opacity:0.6; margin: 5px 0 15px;">Если у вас уже был аккаунт, введите ник для переноса</p>
             </div>
-            <div id="form-reg" style="display:none;">
+
+            <div id="phone-area">
+                <input type="tel" id="auth-phone" placeholder="+79001234567">
+                <button id="send-code-btn" onclick="processPhoneAuth()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px;">ОТПРАВИТЬ КОД</button>
+            </div>
+
+            <div id="otp-area" style="display:none;">
+                <input type="number" id="auth-otp" placeholder="Код из СМС">
+                <button onclick="verifyOtp()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px;">ПОДТВЕРДИТЬ</button>
+            </div>
+
+            <div id="reg-fields" style="display:none; margin-top: 10px;">
                 <input type="text" id="r-e-input" placeholder="😊" maxlength="2" style="font-size:30px; text-align:center;">
-                <input type="text" id="r-n-input" placeholder="Твое имя">
-                <input type="text" id="r-h-input" placeholder="@username">
-                <button onclick="register()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">СОЗДАТЬ</button>
+                <input type="text" id="r-n-input" placeholder="Имя">
+                <input type="text" id="r-h-new" placeholder="@username (новый)">
             </div>
         </div>
     </div>
@@ -363,68 +378,142 @@ function mobTab(id) {
         const vBadge = `<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M22.5 12.5C22.5 18.0228 18.0228 22.5 12.5 22.5C6.97715 22.5 2.5 18.0228 2.5 12.5C2.5 6.97715 6.97715 2.5 12.5 2.5C18.0228 2.5 22.5 6.97715 22.5 12.5Z" fill="#00A3FF"/><path d="M10.5 15.5L7.5 12.5L8.5 11.5L10.5 13.5L15.5 8.5L16.5 9.5L10.5 15.5Z" fill="white"/></svg></span>`;
         const themeList = ["dark", "light", "purple", "lime", "ocean", "sunset", "rose", "forest", "midnight", "gold"];
 
-        function switchAuth(t) {
-            document.getElementById('form-login').style.display = t==='login'?'block':'none';
-            document.getElementById('form-reg').style.display = t==='reg'?'block':'none';
-            document.getElementById('tab-l').className = t==='login'?'auth-tab active':'auth-tab';
-            document.getElementById('tab-r').className = t==='reg'?'auth-tab active':'auth-tab';
+        const auth = firebase.auth();
+let confirmationResult = null;
+let currentAuthMode = 'login';
+
+// Переключение вкладок Вход/Регистрация
+function switchAuth(t) {
+    currentAuthMode = t;
+    document.getElementById('tab-l').className = t==='login'?'auth-tab active':'auth-tab';
+    document.getElementById('tab-r').className = t==='reg'?'auth-tab active':'auth-tab';
+    // Показываем поле ника только для входа (чтобы связать старый аккаунт)
+    document.getElementById('handle-check-area').style.display = t==='login' ? 'block' : 'none';
+    document.getElementById('reg-fields').style.display = t==='reg' ? 'block' : 'none';
+}
+
+// 1. ОТПРАВКА СМС
+async function processPhoneAuth() {
+    const phone = document.getElementById('auth-phone').value.trim();
+    const handle = document.getElementById('auth-handle').value.trim().replace('@','').toLowerCase();
+
+    if (!phone.startsWith('+')) return alert("Введите номер в формате +79991234567");
+    
+    // Инициализация невидимой капчи
+    if(!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {'size': 'invisible'});
+    }
+
+    // Если это вход по старым данным, проверяем существует ли ник
+    if (currentAuthMode === 'login' && handle !== "") {
+        const snap = await db.ref('handles/' + handle).once('value');
+        if (!snap.exists()) return alert("Пользователь с таким ником не найден!");
+    }
+
+    // Запуск отправки СМС через Firebase
+    auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
+        .then((res) => {
+            confirmationResult = res;
+            // Скрываем ввод телефона, показываем ввод кода
+            document.getElementById('phone-area').style.display = 'none';
+            document.getElementById('handle-check-area').style.display = 'none';
+            document.getElementById('reg-fields').style.display = 'none';
+            document.getElementById('auth-tabs-container').style.display = 'none';
+            document.getElementById('otp-area').style.display = 'block';
+        }).catch((err) => {
+            console.error(err);
+            alert("Ошибка СМС: " + err.message);
+        });
+}
+
+// 2. ПРОВЕРКА КОДА ИЗ СМС
+async function verifyOtp() {
+    const code = document.getElementById('auth-otp').value;
+    if(!code) return alert("Введите код!");
+
+    confirmationResult.confirm(code).then(async (result) => {
+        const phone = result.user.phoneNumber;
+        if (currentAuthMode === 'login') {
+            await handleLoginFlow(phone);
+        } else {
+            await handleRegisterFlow(phone);
+        }
+    }).catch((err) => {
+        console.error(err);
+        alert("Код неверный или устарел!");
+    });
+}
+
+// 3. ЛОГИКА ВХОДА И СВЯЗКИ (Чтобы не потерять аккаунт)
+async function handleLoginFlow(phone) {
+    const pKey = phone.replace('+', '');
+    // Проверяем, есть ли уже этот телефон в базе
+    const phoneSnap = await db.ref('phones/' + pKey).once('value');
+
+    if (phoneSnap.exists()) {
+        // Телефон уже привязан, просто заходим в профиль
+        const uid = phoneSnap.val();
+        const uSnap = await db.ref('users/' + uid).once('value');
+        loginFinal(uSnap.val());
+    } else {
+        // Телефона нет. Проверяем, ввел ли пользователь ник для связки
+        const handle = document.getElementById('auth-handle').value.trim().replace('@','').toLowerCase();
+        if (!handle) {
+            alert("Ваш номер еще не привязан к аккаунту. Пожалуйста, введите ваш @ник для связки.");
+            location.reload();
+            return;
         }
 
-        async function register() {
-    try {
-        const name = document.getElementById('r-n-input').value.trim();
-        const emoji = document.getElementById('r-e-input').value || '😊';
-        let handle = document.getElementById('r-h-input').value.toLowerCase().trim();
+        const hSnap = await db.ref('handles/' + handle).once('value');
+        if(!hSnap.exists()) return alert("Ник не найден!");
         
-        if(!name || !handle) return alert("Заполни все поля!");
-        if(!handle.startsWith('@')) handle = '@' + handle;
-        const hKey = handle.replace('@','');
-
-        // Проверка ника
-        const snap = await db.ref('handles/' + hKey).once('value');
-        if(snap.exists()) return alert("Этот ник уже занят!");
-
-        const id = Math.random().toString(36).substr(2, 6).toUpperCase();
-        const newUser = { 
-            id, name, handle, 
-            avatar: emoji, 
-            bio: "Привет, я в Vibe!", 
-            verified: false, 
-            online: true
-        };
+        const uid = hSnap.val();
         
-        await db.ref('users/' + id).set(newUser); 
-        await db.ref('handles/' + hKey).set(id);
+        // Магия связки: записываем номер телефона в старый профиль
+        await db.ref(`users/${uid}/phone`).set(phone);
+        await db.ref(`phones/${pKey}`).set(uid);
         
-        localStorage.setItem('liquid_pro_v32', JSON.stringify(newUser));
-        location.reload(); 
-    } catch (e) {
-        console.error(e);
-        alert("Ошибка регистрации: " + e.message);
+        const uSnap = await db.ref('users/' + uid).once('value');
+        loginFinal(uSnap.val());
     }
 }
 
-async function login() {
-    try {
-        let h = document.getElementById('l-h-input').value.replace('@','').toLowerCase().trim();
-        if(!h) return alert("Введи свой @ник!");
-        
-        const snap = await db.ref('handles/' + h).once('value');
-        if(!snap.exists()) return alert("Пользователь не найден!");
-        
-        const uid = snap.val();
-        const uSnap = await db.ref('users/' + uid).once('value');
-        
-        if(uSnap.exists()) {
-            localStorage.setItem('liquid_pro_v32', JSON.stringify(uSnap.val()));
-            location.reload();
-        } else {
-            alert("Данные пользователя не найдены в базе.");
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Ошибка входа: " + e.message);
-    }
+// 4. РЕГИСТРАЦИЯ НОВОГО ПОЛЬЗОВАТЕЛЯ
+async function handleRegisterFlow(phone) {
+    const name = document.getElementById('r-n-input').value.trim();
+    const handle = document.getElementById('r-h-new').value.trim().replace('@','').toLowerCase();
+    const emoji = document.getElementById('r-e-input').value || '😊';
+
+    if (!name || !handle) return alert("Заполните имя и придумайте ник!");
+    
+    // Проверка, не занят ли ник
+    const hSnap = await db.ref('handles/' + handle).once('value');
+    if (hSnap.exists()) return alert("Этот ник уже кем-то занят!");
+
+    const id = Math.random().toString(36).substr(2, 6).toUpperCase();
+    const newUser = { 
+        id, 
+        name, 
+        handle: '@' + handle, 
+        avatar: emoji, 
+        phone: phone, 
+        online: true, 
+        bio: "Я в Vibe!",
+        verified: false
+    };
+
+    // Сохраняем во все таблицы
+    await db.ref('users/' + id).set(newUser);
+    await db.ref('handles/' + handle).set(id);
+    await db.ref('phones/' + phone.replace('+', '')).set(id);
+
+    loginFinal(newUser);
+}
+
+// Завершение авторизации
+function loginFinal(user) {
+    localStorage.setItem('liquid_pro_v32', JSON.stringify(user));
+    location.reload();
 }
 
        async function initApp() {

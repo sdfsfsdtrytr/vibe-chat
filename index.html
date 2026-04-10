@@ -544,41 +544,33 @@ async function login() {
         if(techScreen) techScreen.style.display = (isBreak && !isPrivileged) ? 'flex' : 'none';
     });
 
-// Слушатель ОБЪЯВЛЕНИЯ (Блокировка всех, кроме @artem)
+    // Слушатель ОБЪЯВЛЕНИЯ (Блокировка всех, кроме @artem)
     db.ref('settings/announcement').on('value', snap => {
         const data = snap.val();
         const screen = document.getElementById('screen-announcement');
-        const textElem = document.getElementById('announcement-display-text');
+        const isArtem = (me && me.handle === '@artem');
         
-        // Проверяем: включено ли И не является ли пользователь Артемом
-        if (data && data.active && me.handle !== '@artem') {
-            textElem.innerText = data.text;
+        if (data && data.active && !isArtem) {
+            document.getElementById('announcement-display-text').innerText = data.text;
             screen.style.display = 'flex';
         } else {
             screen.style.display = 'none';
         }
     });
 
-    // Слушатель РАССЫЛКИ (Исправленный: моментально + офлайн)
+    // Слушатель РАССЫЛКИ (Моментально + Офлайн, кроме @artem)
     db.ref('settings/broadcast').on('value', snap => {
         const data = snap.val();
+        const isArtem = (me && me.handle === '@artem');
         
-        // Если данных нет, или это админ Артем — ничего не показываем
-        if (!data || !data.id || (me && me.handle === '@artem')) return;
+        if (!data || !data.id || isArtem) return;
 
-        // Берем ID последней рассылки, которую пользователь УЖЕ закрыл
         const lastSeenId = localStorage.getItem('last_broadcast_id');
         
-        // Если ID из базы не совпадает с тем, что мы сохранили (значит рассылка новая)
         if (data.id !== lastSeenId) {
-            const brdScreen = document.getElementById('screen-broadcast');
-            const brdText = document.getElementById('broadcast-display-text');
-            
-            if (brdScreen && brdText) {
-                brdText.innerText = data.text; // Устанавливаем текст
-                brdScreen.style.display = 'flex'; // Показываем плашку
-                window.currentBroadcastId = data.id; // Запоминаем для функции "Понятно"
-            }
+            document.getElementById('broadcast-display-text').innerText = data.text;
+            document.getElementById('screen-broadcast').style.display = 'flex';
+            window.currentBroadcastId = data.id; 
         }
     });
 
@@ -1159,26 +1151,30 @@ async function removeChat() {
 // Функция "Понятно"
 function closeBroadcast() {
     if (window.currentBroadcastId) {
-        // Сохраняем ID рассылки в память устройства, чтобы она больше не всплывала
         localStorage.setItem('last_broadcast_id', window.currentBroadcastId);
     }
     document.getElementById('screen-broadcast').style.display = 'none';
 }
 
-// Отправка рассылки (Админ)
+async function updateAnnouncement(active) {
+    const text = document.getElementById('admin-ann-text').value;
+    if (active && !text) return alert("Введите текст!");
+    await db.ref('settings/announcement').set({ active: active, text: text || "" });
+    alert(active ? "Объявление включено" : "Объявление выключено");
+}
+
 async function sendGlobalBroadcast() {
     const text = document.getElementById('admin-brd-text').value;
     if (!text) return alert("Введите текст!");
     
-    // Генерируем новый случайный ID для каждой рассылки
-    const newId = "bc_" + Math.random().toString(36).substr(2, 9);
+    // Генерируем новый ID, чтобы у всех моментально всплыло окно
+    const newId = "bc_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
     
     await db.ref('settings/broadcast').set({
         id: newId,
         text: text
     });
     alert("Рассылка отправлена!");
-    document.getElementById('admin-brd-text').value = "";
 }
 
 // --- ЗАПУСК ПРИЛОЖЕНИЯ ---

@@ -13,6 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
     <style>
         :root {
@@ -49,6 +50,13 @@
         .auth-tabs { display: flex; gap: 10px; margin-bottom: 25px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 16px; }
         .auth-tab { flex: 1; padding: 12px; border-radius: 12px; opacity: 0.4; cursor: pointer; }
         .auth-tab.active { background: var(--glass-heavy); opacity: 1; color: var(--accent); }
+        .auth-verify-view { display: none; text-align: left; }
+        .auth-verify-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+        .auth-back-btn { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.08); font-size: 22px; flex-shrink: 0; }
+        .auth-verify-title { font-size: 20px; color: var(--accent); margin-bottom: 4px; }
+        .auth-verify-subtitle { font-size: 12px; opacity: 0.75; line-height: 1.45; }
+        .auth-timer { margin-top: 12px; font-size: 13px; opacity: 0.8; text-align: center; }
+        .auth-resend-btn { width: 100%; padding: 14px; background: rgba(255,255,255,0.08); border-radius: 14px; margin-top: 12px; display: none; }
 
         /* Контекстные меню */
         .custom-menu { position: fixed; z-index: 50000; width: 220px; background: #111827; border: 1px solid var(--accent); border-radius: 12px; display: none; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -222,18 +230,56 @@
         <div class="glass auth-card">
             <h1 style="color:var(--accent); margin-bottom:25px; font-size:32px;">Vibe</h1>
             <div class="auth-tabs">
-                <div class="auth-tab active" id="tab-l" onclick="switchAuth('login')">Вход</div>
+                <div class="auth-tab active" id="tab-l" onclick="switchAuth('login-email')">Вход</div>
                 <div class="auth-tab" id="tab-r" onclick="switchAuth('reg')">Регистрация</div>
+                <div class="auth-tab" id="tab-link" onclick="switchAuth('link')">Привязать почту</div>
             </div>
-            <div id="form-login">
+
+            <div id="auth-verify-view" class="auth-verify-view">
+                <div class="auth-verify-head">
+                    <button class="auth-back-btn" onclick="closeVerifyStep()">←</button>
+                    <div>
+                        <div class="auth-verify-title" id="verify-title">Подтверждение почты</div>
+                        <div class="auth-verify-subtitle" id="verify-subtitle">Мы отправили код на твою почту.</div>
+                    </div>
+                </div>
+                <input type="text" id="verify-code-input" placeholder="🔢 Код из письма" maxlength="6" style="text-align:center; letter-spacing:8px; font-size:20px;">
+                <div class="auth-timer" id="verify-timer">Отправляем код...</div>
+                <button id="verify-submit-btn" onclick="completeEmailFlow()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:14px; font-size:16px;">ПОДТВЕРДИТЬ</button>
+                <button id="verify-resend-btn" class="auth-resend-btn" onclick="resendVerificationCode()">ОТПРАВИТЬ ЕЩЁ РАЗ</button>
+            </div>
+            
+            <!-- Форма входа по email с верификацией -->
+            <div id="form-login-email">
+                <input type="email" id="l-email-input" placeholder="📧 Email">
+                <input type="password" id="l-pass-input" placeholder="🔑 Пароль">
+                <button onclick="startEmailFlow('login')" id="login-btn-main" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">ВОЙТИ ПО ПОЧТЕ</button>
+            </div>
+            
+            <!-- Форма входа по нику (старая) -->
+            <div id="form-login" style="display:none !important;">
                 <input type="text" id="l-h-input" placeholder="@username">
                 <button onclick="login()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">ВОЙТИ</button>
             </div>
+            
+            <!-- Форма регистрации с email -->
             <div id="form-reg" style="display:none;">
+                <input type="email" id="r-email-input" placeholder="📧 Email">
+                <input type="password" id="r-pass-input" placeholder="🔑 Пароль (мин. 6 символов)">
+                <input type="password" id="r-pass-confirm-input" placeholder="🔐 Подтверди пароль">
                 <input type="text" id="r-e-input" placeholder="😊" maxlength="2" style="font-size:30px; text-align:center;">
                 <input type="text" id="r-n-input" placeholder="Твое имя">
                 <input type="text" id="r-h-input" placeholder="@username">
-                <button onclick="register()" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">СОЗДАТЬ</button>
+                <button onclick="startEmailFlow('reg')" id="reg-btn-main" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">СОЗДАТЬ</button>
+            </div>
+            
+            <!-- Форма привязки почты для существующих юзеров -->
+            <div id="form-link" style="display:none;">
+                <p style="font-size:13px; opacity:0.8; margin-bottom:15px;">Введи свой @username чтобы привязать почту к аккаунту</p>
+                <input type="text" id="link-h-input" placeholder="@username">
+                <input type="email" id="link-email-input" placeholder="📧 Email для привязки">
+                <input type="password" id="link-pass-input" placeholder="🔑 Новый пароль">
+                <button onclick="startEmailFlow('link')" id="link-btn-main" style="width:100%; padding:16px; background:var(--accent); color:#000; border-radius:15px; font-weight:bold; margin-top:10px; font-size:16px;">ПРИВЯЗАТЬ ПОЧТУ</button>
             </div>
         </div>
     </div>
@@ -278,6 +324,7 @@
                     <label>Имя пользователя:</label><div style="display:flex;"><input type="text" id="set-name-pc"><button onclick="saveName('pc')" class="save-btn">Сохранить</button></div>
                     <label>Bio (Описание):</label><div style="display:flex;"><textarea id="set-bio-pc"></textarea><button onclick="saveBio('pc')" class="save-btn">Сохранить</button></div>
                     <label>Тема:</label><select id="pc-theme-sel" onchange="changeTheme(this.value)"></select>
+                    <button onclick="showLinkEmailModal()" class="save-btn" id="pc-link-email-btn" style="width:100%; background:#8b5cf6; margin-top:10px;">📧 Привязать почту</button>
                     <button onclick="window.open('https://forms.yandex.ru/cloud/69c657e1493639ae65329446','_blank')" class="verify-btn" id="pc-v-btn-real">ВЕРИФИКАЦИЯ</button>
                     <button onclick="logout()" style="color:red; margin-top:40px; width:100%;">ВЫЙТИ</button>
                 </div>
@@ -295,6 +342,7 @@
             <label>Имя:</label><div style="display:flex;"><input type="text" id="mob-set-name-in"><button onclick="saveName('mob')" class="save-btn">Сохранить</button></div>
             <label>Bio:</label><div style="display:flex;"><textarea id="mob-set-bio-in"></textarea><button onclick="saveBio('mob')" class="save-btn">Сохранить</button></div>
             <label>Тема:</label><select id="mob-theme-sel" onchange="changeTheme(this.value)"></select>
+            <button onclick="showLinkEmailModal()" class="save-btn" id="mob-link-email-btn" style="width:100%; background:#8b5cf6; margin-top:10px;">📧 Привязать почту</button>
             <button onclick="window.open('https://forms.yandex.ru/cloud/69c657e1493639ae65329446','_blank')" class="verify-btn" id="mob-v-btn-real">ВЕРИФИКАЦИЯ</button>
             <button onclick="logout()" style="color:red; margin-top:30px; width:100%;">ВЫЙТИ</button>
         </div>
@@ -323,6 +371,18 @@
                 <button id="pop-block-btn" class="save-btn" style="width:100%;" onclick="toggleBlock()">🚫 Заблокировать</button>
                 <button class="save-btn" style="width:100%; background:#ea868f;" onclick="removeChat()">🗑️ Удалить друга</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно привязки почты -->
+    <div id="link-email-modal" style="display:none; position:fixed; inset:0; z-index:20000; background:rgba(0,0,0,0.8); backdrop-filter:blur(10px); justify-content:center; align-items:center;">
+        <div class="glass" style="width:340px; padding:30px; border-radius:20px; text-align:center;" onclick="event.stopPropagation()">
+            <h2 style="color:var(--accent); margin-bottom:15px;">📧 Привязать почту</h2>
+            <p style="font-size:13px; opacity:0.7; margin-bottom:20px;">Привяжи почту чтобы входить в аккаунт без @ника</p>
+            <input type="email" id="modal-link-email" placeholder="📧 Email" style="text-align:center;">
+            <input type="password" id="modal-link-pass" placeholder="🔑 Пароль (мин. 6 символов)" style="text-align:center;">
+            <button onclick="doLinkEmail()" class="save-btn" style="width:100%; background:var(--accent); color:#000; margin-top:10px;">ПРИВЯЗАТЬ</button>
+            <button onclick="closeLinkEmailModal()" style="margin-top:15px; opacity:0.6; font-size:13px;">Отмена</button>
         </div>
     </div>
 
@@ -397,6 +457,14 @@ if (!firebase.apps.length) {
 }
 const db = firebase.database();
 const storage = firebase.storage();
+const EMAILJS_PUBLIC_KEY = "Nx7G0SMyg2yP2bvBW";
+const EMAILJS_SERVICE_ID = "default_service";
+const EMAILJS_TEMPLATE_ID = "template_4yxrnid";
+
+// 3. Инициализация EmailJS
+(function() {
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+})();
 
 // 3. Безопасный запуск уведомлений
 let messaging = null;
@@ -445,77 +513,346 @@ function mobTab(id) {
         let me = null; let activePeer = null; isPC = window.innerWidth > 768;
         let replyingTo = null; let selectedMsgId = null; let selectedMsgText = ""; let contextPeerId = null;
         let mediaRecorder = null; let audioChunks = [];
+        let authFlowMode = null;
+        let authResendTimer = null;
 
         const vBadge = `<span class="verified-badge"><svg viewBox="0 0 24 24" fill="none"><path d="M22.5 12.5C22.5 18.0228 18.0228 22.5 12.5 22.5C6.97715 22.5 2.5 18.0228 2.5 12.5C2.5 6.97715 6.97715 2.5 12.5 2.5C18.0228 2.5 22.5 6.97715 22.5 12.5Z" fill="#00A3FF"/><path d="M10.5 15.5L7.5 12.5L8.5 11.5L10.5 13.5L15.5 8.5L16.5 9.5L10.5 15.5Z" fill="white"/></svg></span>`;
         const themeList = ["dark", "light", "purple", "lime", "ocean", "sunset", "rose", "forest", "midnight", "gold"];
 
         function switchAuth(t) {
-            document.getElementById('form-login').style.display = t==='login'?'block':'none';
+            if (t === 'login') t = 'login-email';
+            closeVerifyStep(true);
+            document.getElementById('form-login').style.display = 'none';
+            document.getElementById('form-login-email').style.display = t==='login-email'?'block':'none';
             document.getElementById('form-reg').style.display = t==='reg'?'block':'none';
-            document.getElementById('tab-l').className = t==='login'?'auth-tab active':'auth-tab';
+            document.getElementById('form-link').style.display = t==='link'?'block':'none';
+            document.getElementById('auth-verify-view').style.display = 'none';
+            document.getElementById('tab-l').className = t==='login-email'?'auth-tab active':'auth-tab';
             document.getElementById('tab-r').className = t==='reg'?'auth-tab active':'auth-tab';
+            document.getElementById('tab-link').className = t==='link'?'auth-tab active':'auth-tab';
         }
 
-        async function register() {
-    try {
-        const name = document.getElementById('r-n-input').value.trim();
-        const emoji = document.getElementById('r-e-input').value || '😊';
-        let handle = document.getElementById('r-h-input').value.toLowerCase().trim();
-        
-        if(!name || !handle) return alert("Заполни все поля!");
-        if(!handle.startsWith('@')) handle = '@' + handle;
-        const hKey = handle.replace('@','');
+        function generateCode() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
 
-        // Проверка ника
-        const snap = await db.ref('handles/' + hKey).once('value');
-        if(snap.exists()) return alert("Этот ник уже занят!");
+        function getVerifyStorage() {
+            return JSON.parse(localStorage.getItem('vibe_verify_data') || '{}');
+        }
 
-        const id = Math.random().toString(36).substr(2, 6).toUpperCase();
-        const newUser = { 
-            id, name, handle, 
-            avatar: emoji, 
-            bio: "Привет, я в Vibe!", 
-            verified: false, 
-            online: true
-        };
-        
-        await db.ref('users/' + id).set(newUser); 
-        await db.ref('handles/' + hKey).set(id);
-        
-        localStorage.setItem('liquid_pro_v32', JSON.stringify(newUser));
-        location.reload(); 
-    } catch (e) {
-        console.error(e);
-        alert("Ошибка регистрации: " + e.message);
-    }
-}
+        function clearVerifyStorage() {
+            localStorage.removeItem('vibe_verify_data');
+        }
 
-async function login() {
-    try {
-        let h = document.getElementById('l-h-input').value.replace('@','').toLowerCase().trim();
-        if(!h) return alert("Введи свой @ник!");
-        
-        const snap = await db.ref('handles/' + h).once('value');
-        if(!snap.exists()) return alert("Пользователь не найден!");
-        
-        const uid = snap.val();
-        const uSnap = await db.ref('users/' + uid).once('value');
-        
-        if(uSnap.exists()) {
-            localStorage.setItem('liquid_pro_v32', JSON.stringify(uSnap.val()));
+        function formatTimer(secondsLeft) {
+            const sec = Math.max(0, secondsLeft);
+            return `Отправить ещё раз можно через ${String(sec).padStart(2, '0')} сек.`;
+        }
+
+        function getAuthConfig(mode) {
+            const map = {
+                login: {
+                    emailId: 'l-email-input',
+                    title: 'Вход по почте',
+                    subtitle: 'Мы отправили код на эту почту. Введи его, чтобы войти в аккаунт.',
+                    submitText: 'ВОЙТИ'
+                },
+                reg: {
+                    emailId: 'r-email-input',
+                    title: 'Подтверди регистрацию',
+                    subtitle: 'Код уже отправлен на почту. После подтверждения аккаунт сохранится в базе.',
+                    submitText: 'ЗАРЕГИСТРИРОВАТЬСЯ'
+                },
+                link: {
+                    emailId: 'link-email-input',
+                    title: 'Привязка почты',
+                    subtitle: 'Подтверди почту кодом, и старый аккаунт сможет входить по email и паролю.',
+                    submitText: 'ПРИВЯЗАТЬ ПОЧТУ'
+                }
+            };
+            return map[mode];
+        }
+
+        function startResendCountdown(startTime) {
+            const timerEl = document.getElementById('verify-timer');
+            const resendBtn = document.getElementById('verify-resend-btn');
+            clearInterval(authResendTimer);
+            const tick = () => {
+                const secondsLeft = 60 - Math.floor((Date.now() - startTime) / 1000);
+                if (secondsLeft > 0) {
+                    timerEl.textContent = formatTimer(secondsLeft);
+                    resendBtn.style.display = 'none';
+                } else {
+                    timerEl.textContent = 'Код не пришёл? Можно отправить его ещё раз.';
+                    resendBtn.style.display = 'block';
+                    clearInterval(authResendTimer);
+                    authResendTimer = null;
+                }
+            };
+            tick();
+            authResendTimer = setInterval(tick, 1000);
+        }
+
+        function showVerifyStep(mode, email, startTime) {
+            const config = getAuthConfig(mode);
+            authFlowMode = mode;
+            document.getElementById('form-login').style.display = 'none';
+            document.getElementById('form-login-email').style.display = 'none';
+            document.getElementById('form-reg').style.display = 'none';
+            document.getElementById('form-link').style.display = 'none';
+            document.getElementById('auth-verify-view').style.display = 'block';
+            document.getElementById('verify-title').textContent = config.title;
+            document.getElementById('verify-subtitle').textContent = `${config.subtitle} ${email}`;
+            document.getElementById('verify-submit-btn').textContent = config.submitText;
+            document.getElementById('verify-code-input').value = '';
+            startResendCountdown(startTime);
+        }
+
+        function closeVerifyStep(silent = false) {
+            clearInterval(authResendTimer);
+            authResendTimer = null;
+            authFlowMode = null;
+            document.getElementById('auth-verify-view').style.display = 'none';
+            document.getElementById('verify-code-input').value = '';
+            document.getElementById('verify-resend-btn').style.display = 'none';
+            if (!silent) {
+                const activeTab = document.getElementById('tab-r').className.includes('active')
+                    ? 'reg'
+                    : document.getElementById('tab-link').className.includes('active')
+                        ? 'link'
+                        : 'login-email';
+                switchAuth(activeTab);
+            }
+        }
+
+        async function validateAuthFlow(mode) {
+            if (mode === 'login') {
+                const email = document.getElementById('l-email-input').value.trim().toLowerCase();
+                const password = document.getElementById('l-pass-input').value;
+                if (!email || !password) throw new Error('Введи email и пароль!');
+                const emailSnap = await db.ref('emails/' + email.replace(/\./g, '_')).once('value');
+                if (!emailSnap.exists()) throw new Error('Пользователь с такой почтой не найден!');
+                return { email, name: 'Пользователь' };
+            }
+
+            if (mode === 'reg') {
+                const email = document.getElementById('r-email-input').value.trim().toLowerCase();
+                const password = document.getElementById('r-pass-input').value;
+                const passwordConfirm = document.getElementById('r-pass-confirm-input').value;
+                const name = document.getElementById('r-n-input').value.trim();
+                let handle = document.getElementById('r-h-input').value.toLowerCase().trim();
+                if (!email || !password || !passwordConfirm || !name || !handle) throw new Error('Заполни все поля!');
+                if (password.length < 6) throw new Error('Пароль должен быть минимум 6 символов!');
+                if (password !== passwordConfirm) throw new Error('Пароли не совпадают!');
+                if (!handle.startsWith('@')) handle = '@' + handle;
+                const hKey = handle.replace('@', '');
+                const [handleSnap, emailSnap] = await Promise.all([
+                    db.ref('handles/' + hKey).once('value'),
+                    db.ref('emails/' + email.replace(/\./g, '_')).once('value')
+                ]);
+                if (handleSnap.exists()) throw new Error('Этот ник уже занят!');
+                if (emailSnap.exists()) throw new Error('Эта почта уже используется!');
+                return { email, name };
+            }
+
+            const rawHandle = document.getElementById('link-h-input').value.trim().toLowerCase();
+            const email = document.getElementById('link-email-input').value.trim().toLowerCase();
+            const password = document.getElementById('link-pass-input').value;
+            if (!rawHandle || !email || !password) throw new Error('Заполни все поля!');
+            if (password.length < 6) throw new Error('Пароль должен быть минимум 6 символов!');
+            const hKey = rawHandle.replace('@', '');
+            const userRef = await db.ref('handles/' + hKey).once('value');
+            if (!userRef.exists()) throw new Error('Пользователь с таким ником не найден!');
+            const emailSnap = await db.ref('emails/' + email.replace(/\./g, '_')).once('value');
+            if (emailSnap.exists()) throw new Error('Эта почта уже используется!');
+            return { email, name: rawHandle };
+        }
+
+        async function sendVerificationCode(mode, isResend = false) {
+            const data = await validateAuthFlow(mode);
+            const code = generateCode();
+            const now = Date.now();
+            localStorage.setItem('vibe_verify_data', JSON.stringify({
+                email: data.email,
+                code: code,
+                mode: mode,
+                timestamp: now
+            }));
+
+            await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+                to_email: data.email,
+                verification_code: code,
+                user_name: data.name || 'Пользователь'
+            });
+
+            showVerifyStep(mode, data.email, now);
+            if (!isResend) {
+                alert('Код отправлен на ' + data.email + '. Проверь почту.');
+            }
+        }
+
+        async function startEmailFlow(mode) {
+            try {
+                await sendVerificationCode(mode);
+            } catch (e) {
+                console.error('Email flow error:', e);
+                alert(e.message || 'Не удалось отправить код. Проверь данные и попробуй ещё раз.');
+            }
+        }
+
+        async function resendVerificationCode() {
+            if (!authFlowMode) return;
+            try {
+                await sendVerificationCode(authFlowMode, true);
+                alert('Новый код отправлен.');
+            } catch (e) {
+                console.error('Resend code error:', e);
+                alert(e.message || 'Не удалось отправить код повторно.');
+            }
+        }
+
+        function assertVerification(mode) {
+            const codeInput = document.getElementById('verify-code-input').value.trim();
+            const stored = getVerifyStorage();
+            const expectedEmail = document.getElementById(getAuthConfig(mode).emailId).value.trim().toLowerCase();
+            if (!stored.code || stored.mode !== mode || stored.email !== expectedEmail) {
+                throw new Error('Сначала запроси код заново.');
+            }
+            if (Date.now() - stored.timestamp > 10 * 60 * 1000) {
+                clearVerifyStorage();
+                throw new Error('Код истёк. Запроси новый.');
+            }
+            if (codeInput !== stored.code) {
+                throw new Error('Неверный код. Проверь письмо.');
+            }
+        }
+
+        async function completeEmailFlow() {
+            if (!authFlowMode) return;
+            try {
+                assertVerification(authFlowMode);
+                if (authFlowMode === 'login') {
+                    await loginWithEmail();
+                } else if (authFlowMode === 'reg') {
+                    await registerWithEmail();
+                } else if (authFlowMode === 'link') {
+                    await linkEmailToAccount();
+                }
+            } catch (e) {
+                console.error('Verify error:', e);
+                alert(e.message || 'Не удалось завершить подтверждение.');
+            }
+        }
+
+        async function registerWithEmail() {
+            const email = document.getElementById('r-email-input').value.trim().toLowerCase();
+            const password = document.getElementById('r-pass-input').value;
+            const name = document.getElementById('r-n-input').value.trim();
+            const emoji = document.getElementById('r-e-input').value || '😊';
+            let handle = document.getElementById('r-h-input').value.toLowerCase().trim();
+
+            if (!handle.startsWith('@')) handle = '@' + handle;
+            assertVerification('reg');
+
+            const hKey = handle.replace('@', '');
+            const [handleSnap, emailSnap] = await Promise.all([
+                db.ref('handles/' + hKey).once('value'),
+                db.ref('emails/' + email.replace(/\./g, '_')).once('value')
+            ]);
+            if (handleSnap.exists()) throw new Error('Этот ник уже занят!');
+            if (emailSnap.exists()) throw new Error('Эта почта уже используется!');
+
+            const id = Math.random().toString(36).slice(2, 8).toUpperCase();
+            const newUser = {
+                id,
+                name,
+                handle,
+                avatar: emoji,
+                bio: 'Привет, я в Vibe!',
+                verified: false,
+                online: true,
+                email,
+                passwordHash: btoa(password),
+                createdAt: Date.now()
+            };
+
+            await db.ref('users/' + id).set(newUser);
+            await db.ref('handles/' + hKey).set(id);
+            await db.ref('emails/' + email.replace(/\./g, '_')).set(id);
+
+            clearVerifyStorage();
+            localStorage.setItem('liquid_pro_v32', JSON.stringify(newUser));
             location.reload();
-        } else {
-            alert("Данные пользователя не найдены в базе.");
         }
-    } catch (e) {
-        console.error(e);
-        alert("Ошибка входа: " + e.message);
-    }
-}
+
+        async function loginWithEmail() {
+            const email = document.getElementById('l-email-input').value.trim().toLowerCase();
+            const password = document.getElementById('l-pass-input').value;
+            assertVerification('login');
+
+            const snap = await db.ref('emails/' + email.replace(/\./g, '_')).once('value');
+            if (!snap.exists()) throw new Error('Пользователь с такой почтой не найден!');
+
+            const uid = snap.val();
+            const uSnap = await db.ref('users/' + uid).once('value');
+            if (!uSnap.exists()) throw new Error('Данные пользователя не найдены в базе.');
+
+            const user = uSnap.val();
+            if (!user.passwordHash) throw new Error('Для этого аккаунта ещё не настроен вход по почте. Используй привязку почты.');
+            if (user.passwordHash !== btoa(password)) throw new Error('Неверный пароль!');
+
+            clearVerifyStorage();
+            localStorage.setItem('liquid_pro_v32', JSON.stringify(user));
+            location.reload();
+        }
+
+        async function linkEmailToAccount() {
+            const handle = document.getElementById('link-h-input').value.toLowerCase().trim();
+            const email = document.getElementById('link-email-input').value.trim().toLowerCase();
+            const password = document.getElementById('link-pass-input').value;
+            assertVerification('link');
+
+            const hKey = handle.replace('@', '');
+            const snap = await db.ref('handles/' + hKey).once('value');
+            if (!snap.exists()) throw new Error('Пользователь с таким ником не найден!');
+
+            const uid = snap.val();
+            const uSnap = await db.ref('users/' + uid).once('value');
+            const user = uSnap.val();
+            if (!user) throw new Error('Аккаунт не найден.');
+            if (user.email) throw new Error('К этому аккаунту уже привязана почта!');
+
+            const emailSnap = await db.ref('emails/' + email.replace(/\./g, '_')).once('value');
+            if (emailSnap.exists()) throw new Error('Эта почта уже используется!');
+
+            await db.ref('users/' + uid + '/email').set(email);
+            await db.ref('users/' + uid + '/passwordHash').set(btoa(password));
+            await db.ref('emails/' + email.replace(/\./g, '_')).set(uid);
+
+            clearVerifyStorage();
+            if (me && me.id === uid) {
+                me.email = email;
+                me.passwordHash = btoa(password);
+                localStorage.setItem('liquid_pro_v32', JSON.stringify(me));
+                updateUI();
+            }
+            alert('Почта успешно привязана. Теперь можно входить по email, паролю и коду.');
+            switchAuth('login-email');
+        }
 
        async function initApp() {
     if (!me || !me.id) return;
     document.getElementById('auth-page').style.display = 'none';
+    
+    // Проверяем, привязана ли почта. Если нет - показываем предложение
+    if (!me.email && !localStorage.getItem('email_prompt_shown')) {
+        setTimeout(() => {
+            if (confirm("Хочешь привязать почту к аккаунту? Это позволит входить без @ника.")) {
+                showLinkEmailModal();
+            }
+            localStorage.setItem('email_prompt_shown', 'true');
+        }, 1000);
+    }
     
     // Слушатель МОЕГО профиля (Удаление и Блокировки)
     db.ref(`users/${me.id}`).on('value', snap => {
@@ -643,6 +980,53 @@ async function login() {
         // Если права администратора забрали — удаляем кнопку из интерфейса
         const btn = document.getElementById('admin-btn-global');
         if(btn) btn.remove();
+    }
+    
+    // 4. Кнопка привязки почты - показываем только если email не привязан
+    const pcEmailBtn = document.getElementById('pc-link-email-btn');
+    const mobEmailBtn = document.getElementById('mob-link-email-btn');
+    if(pcEmailBtn) pcEmailBtn.style.display = me.email ? 'none' : 'block';
+    if(mobEmailBtn) mobEmailBtn.style.display = me.email ? 'none' : 'block';
+}
+
+// Функции для привязки почты
+function showLinkEmailModal() {
+    document.getElementById('link-email-modal').style.display = 'flex';
+}
+
+function closeLinkEmailModal() {
+    document.getElementById('link-email-modal').style.display = 'none';
+    document.getElementById('modal-link-email').value = '';
+    document.getElementById('modal-link-pass').value = '';
+}
+
+async function doLinkEmail() {
+    try {
+        const email = document.getElementById('modal-link-email').value.trim().toLowerCase();
+        const password = document.getElementById('modal-link-pass').value;
+        
+        if(!email || !password) return alert("Заполни все поля!");
+        if(password.length < 6) return alert("Пароль должен быть минимум 6 символов!");
+        
+        // Проверяем что email свободен
+        const emailSnap = await db.ref('emails/' + email.replace(/\./g, '_')).once('value');
+        if(emailSnap.exists()) return alert("Эта почта уже используется!");
+        
+        // Привязываем email к текущему аккаунту
+        await db.ref('users/' + me.id + '/email').set(email);
+        await db.ref('users/' + me.id + '/passwordHash').set(btoa(password));
+        await db.ref('emails/' + email.replace(/\./g, '_')).set(me.id);
+        
+        alert("Почта успешно привязана! Теперь можешь входить по почте.");
+        closeLinkEmailModal();
+        
+        // Обновляем me
+        me.email = email;
+        me.passwordHash = btoa(password);
+        localStorage.setItem('liquid_pro_v32', JSON.stringify(me));
+    } catch (e) {
+        console.error(e);
+        alert("Ошибка: " + e.message);
     }
 }
 
@@ -1184,6 +1568,38 @@ async function sendGlobalBroadcast() {
 }
 
 // --- ЗАПУСК ПРИЛОЖЕНИЯ ---
+function showLinkEmailModal() {
+    const authPage = document.getElementById('auth-page');
+    if (authPage) authPage.style.display = 'flex';
+    switchAuth('link');
+    if (me && me.handle) {
+        const handleInput = document.getElementById('link-h-input');
+        if (handleInput) {
+            handleInput.value = me.handle;
+            handleInput.readOnly = true;
+            handleInput.style.opacity = '0.7';
+        }
+    }
+}
+
+function closeLinkEmailModal() {
+    const modal = document.getElementById('link-email-modal');
+    if (modal) modal.style.display = 'none';
+    const modalEmail = document.getElementById('modal-link-email');
+    const modalPass = document.getElementById('modal-link-pass');
+    if (modalEmail) modalEmail.value = '';
+    if (modalPass) modalPass.value = '';
+    const handleInput = document.getElementById('link-h-input');
+    if (handleInput) {
+        handleInput.readOnly = false;
+        handleInput.style.opacity = '1';
+    }
+}
+
+async function doLinkEmail() {
+    showLinkEmailModal();
+}
+
 window.onload = () => {
     const sUser = localStorage.getItem('liquid_pro_v32');
     if (sUser) {

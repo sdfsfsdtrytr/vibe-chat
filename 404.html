@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#050505">
+  <title>Vibe</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --accent: #1597ff;
+      --bg: #050505;
+      --card: rgba(22, 26, 34, .74);
+      --stroke: rgba(255, 255, 255, .16);
+      --text: #fff;
+      --muted: rgba(255, 255, 255, .68);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 22% 14%, rgba(21, 151, 255, .18), transparent 28%),
+        radial-gradient(circle at 82% 74%, rgba(72, 219, 251, .14), transparent 34%),
+        #050505;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    }
+    .shell {
+      position: relative;
+      width: min(430px, 100%);
+      animation: cardIn .46s cubic-bezier(.18, .9, .22, 1) both;
+    }
+    .brand {
+      margin: 0 0 14px;
+      font-size: 42px;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-align: center;
+      text-shadow: 0 18px 42px rgba(0, 0, 0, .35);
+    }
+    .card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 34px;
+      padding: 30px 24px 24px;
+      text-align: center;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .055));
+      border: 1px solid var(--stroke);
+      box-shadow: 0 28px 90px rgba(0, 0, 0, .52), inset 0 1px 0 rgba(255, 255, 255, .16);
+      backdrop-filter: blur(26px) saturate(180%);
+      -webkit-backdrop-filter: blur(26px) saturate(180%);
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .11), transparent 42%);
+      pointer-events: none;
+    }
+    .avatar {
+      position: relative;
+      width: 118px;
+      height: 118px;
+      margin: 0 auto 18px;
+      border-radius: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: rgba(255, 255, 255, .12);
+      background-size: cover;
+      background-position: center;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, .38), inset 0 0 0 1px rgba(255, 255, 255, .12);
+      font-size: 54px;
+    }
+    h1 {
+      position: relative;
+      margin: 0;
+      font-size: 31px;
+      line-height: 1.08;
+      font-weight: 850;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+    p {
+      position: relative;
+      margin: 12px auto 0;
+      max-width: 330px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.42;
+      overflow-wrap: anywhere;
+    }
+    .meta {
+      position: relative;
+      margin-top: 16px;
+      color: rgba(255, 255, 255, .5);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .loader {
+      position: relative;
+      margin: 24px auto 0;
+      width: 54px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .16);
+      overflow: hidden;
+    }
+    .loader::before {
+      content: "";
+      display: block;
+      width: 42%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      animation: load 1.05s ease-in-out infinite;
+    }
+    .open-btn {
+      position: relative;
+      width: 100%;
+      height: 54px;
+      margin-top: 22px;
+      border: 0;
+      border-radius: 20px;
+      background: var(--accent);
+      color: white;
+      font-size: 17px;
+      font-weight: 850;
+      cursor: pointer;
+      box-shadow: 0 16px 36px rgba(21, 151, 255, .26);
+    }
+    .hide { display: none; }
+    @keyframes load {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(260%); }
+    }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(14px) scale(.985); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="brand">Vibe</div>
+    <section class="card" id="card">
+      <div class="avatar" id="avatar">📣</div>
+      <h1 id="title">Загружаем канал</h1>
+      <p id="desc">Сейчас покажем карточку и откроем канал в мессенджере.</p>
+      <div class="meta" id="meta">vibe8.ru</div>
+      <div class="loader" id="loader"></div>
+      <button class="open-btn hide" id="openBtn" type="button">Открыть в Vibe</button>
+    </section>
+  </main>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAcs0ELY176L-d0qLZlpj1aJcej2b8fdPI",
+      authDomain: "vtcty-6c839.firebaseapp.com",
+      projectId: "vtcty-6c839",
+      databaseURL: "https://vtcty-6c839-default-rtdb.europe-west1.firebasedatabase.app",
+      storageBucket: "vtcty-6c839.firebasestorage.app"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const $ = id => document.getElementById(id);
+
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+    }
+
+    function normalizeChannelCode(value) {
+      return String(value || '')
+        .trim()
+        .replace(/^https?:\/\/(www\.)?vibe8\.ru\//i, '')
+        .replace(/^https?:\/\/(www\.)?t\.me\//i, '')
+        .replace(/^@+/, '')
+        .replace(/^\/+|\/+$/g, '')
+        .replace(/\s+/g, '_')
+        .replace(/[^a-zA-Z0-9_]/g, '')
+        .toLowerCase();
+    }
+
+    function incomingCode() {
+      const params = new URLSearchParams(location.search || '');
+      const fromQuery = params.get('channel') || params.get('join') || '';
+      const path = decodeURIComponent((location.pathname || '').replace(/^\/+|\/+$/g, ''));
+      const raw = fromQuery || path;
+      if (!raw || raw.includes('.') || raw.toLowerCase().endsWith('html')) return '';
+      return normalizeChannelCode(raw);
+    }
+
+    function avatarHtml(room) {
+      const photo = room && (room.avatarPhoto || room.photo || room.image || room.iconPhoto);
+      if (photo) return { text: '', photo };
+      return { text: (room && room.avatar) || '📣', photo: '' };
+    }
+
+    function paint(room, stateText) {
+      const avatar = avatarHtml(room);
+      $('avatar').textContent = avatar.text || '';
+      $('avatar').style.backgroundImage = avatar.photo ? `url("${String(avatar.photo).replace(/"/g, '%22')}")` : '';
+      $('title').innerHTML = esc((room && room.name) || 'Канал Vibe');
+      $('desc').innerHTML = esc((room && (room.bio || room.description)) || stateText || 'Открываем канал в Vibe...');
+      $('meta').textContent = room && room.isPublic === false ? 'частный канал' : 'публичный канал';
+    }
+
+    async function findRoom(code) {
+      const linkSnap = await db.ref(`roomLinks/${code}`).once('value');
+      const roomId = linkSnap.val();
+      if (roomId) {
+        const roomSnap = await db.ref(`rooms/${roomId}`).once('value');
+        if (roomSnap.exists()) return { id: roomId, ...(roomSnap.val() || {}) };
+      }
+      const roomsSnap = await db.ref('rooms').once('value');
+      const rooms = roomsSnap.val() || {};
+      const match = Object.entries(rooms).find(([, room]) => {
+        if (!room || room.type !== 'channel') return false;
+        return [room.inviteCode, room.publicLink, room.link, room.slug]
+          .map(normalizeChannelCode)
+          .includes(code);
+      });
+      return match ? { id: match[0], ...(match[1] || {}) } : null;
+    }
+
+    function openMessenger(code) {
+      const target = `${location.origin}/?channel=${encodeURIComponent(code)}&fromLink=1`;
+      location.href = target;
+    }
+
+    async function boot() {
+      const code = incomingCode();
+      if (!code) {
+        $('title').textContent = 'Ссылка не найдена';
+        $('desc').textContent = 'Проверь адрес канала или открой главную страницу Vibe.';
+        $('loader').classList.add('hide');
+        $('openBtn').classList.remove('hide');
+        $('openBtn').textContent = 'Открыть Vibe';
+        $('openBtn').onclick = () => location.href = `${location.origin}/`;
+        return;
+      }
+
+      try {
+        const room = await findRoom(code);
+        if (!room) {
+          $('title').textContent = 'Канал не найден';
+          $('desc').textContent = 'Эта ссылка не привязана к каналу. Попроси новую ссылку.';
+          $('meta').textContent = `vibe8.ru/${code}`;
+          $('loader').classList.add('hide');
+          return;
+        }
+
+        paint(room, 'Открываем канал в мессенджере...');
+        $('openBtn').classList.remove('hide');
+        $('openBtn').onclick = () => openMessenger(code);
+        setTimeout(() => openMessenger(code), 2000);
+      } catch (error) {
+        $('title').textContent = 'Не удалось загрузить канал';
+        $('desc').textContent = 'Проверь интернет и обнови страницу.';
+        $('loader').classList.add('hide');
+      }
+    }
+
+    boot();
+  </script>
+</body>
+</html>

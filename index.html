@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#050505">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Vibe">
     <title>Vibe</title>
     <link rel="shortcut icon" href="Vibe.png" type="image/x-icon">
 
@@ -12850,6 +12854,43 @@ window.openArchiveModal = function() {
     else if (typeof window.openMobChat === 'function') window.openMobChat(room);
   }
 
+  function vibeIsStandaloneApp() {
+    return !!(
+      window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone
+      || document.referrer.startsWith('android-app://')
+    );
+  }
+
+  window.__vibeDeferredInstallPrompt = window.__vibeDeferredInstallPrompt || null;
+  if (!window.__vibeInstallPromptListener) {
+    window.__vibeInstallPromptListener = true;
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      window.__vibeDeferredInstallPrompt = event;
+      document.querySelectorAll('[data-vibe-install-app]').forEach(btn => {
+        btn.style.display = 'inline-flex';
+      });
+    });
+  }
+
+  window.vibeInstallAppFromLink = async function() {
+    const promptEvent = window.__vibeDeferredInstallPrompt;
+    if (!promptEvent) {
+      showCopyToast('Открой меню браузера и нажми “Добавить на главный экран”');
+      return;
+    }
+    promptEvent.prompt();
+    try { await promptEvent.userChoice; } catch (error) {}
+    window.__vibeDeferredInstallPrompt = null;
+  };
+
+  window.vibeOpenCurrentLinkAsApp = function() {
+    const url = `${location.origin}${location.pathname}${location.search || ''}`;
+    try { window.open(url, '_self'); } catch (error) { location.href = url; }
+    showCopyToast('Если Vibe установлен, браузер предложит открыть приложение');
+  };
+
   function vibeShowChannelRouteLanding(room, code) {
     if (!room) return;
     installStyle();
@@ -12865,6 +12906,11 @@ window.openArchiveModal = function() {
         ${avatar}
         <h1>${esc(room.name || 'Канал Vibe')}</h1>
         <p>${esc(room.bio || ('Открываем канал vibe8.ru/' + code))}</p>
+        ${vibeIsStandaloneApp() ? '' : `
+          <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:18px;">
+            <button type="button" onclick="vibeOpenCurrentLinkAsApp()" style="height:48px;border:0;border-radius:18px;background:var(--accent,#1597ff);color:#fff;font-weight:900;">Открыть в приложении Vibe</button>
+            <button type="button" data-vibe-install-app onclick="vibeInstallAppFromLink()" style="display:${window.__vibeDeferredInstallPrompt ? 'inline-flex' : 'none'};height:46px;border:1px solid rgba(255,255,255,.18);border-radius:18px;background:rgba(255,255,255,.10);color:#fff;font-weight:850;align-items:center;justify-content:center;">Установить Vibe</button>
+          </div>`}
         <div class="vibe-link-loading"></div>
       </div>`;
     document.body.appendChild(overlay);

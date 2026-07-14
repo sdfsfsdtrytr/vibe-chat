@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -12850,6 +12850,34 @@ window.openArchiveModal = function() {
     else if (typeof window.openMobChat === 'function') window.openMobChat(room);
   }
 
+  function vibeShowChannelRouteLanding(room, code) {
+    if (!room) return;
+    installStyle();
+    document.querySelectorAll('.vibe-link-landing').forEach(el => el.remove());
+    const photo = photoOf(room);
+    const avatar = photo
+      ? `<div class="vibe-link-avatar" style="background-image:url('${safeUrl(photo)}')"></div>`
+      : `<div class="vibe-link-avatar">${esc(room.avatar || '📣')}</div>`;
+    const overlay = document.createElement('div');
+    overlay.className = 'vibe-link-landing';
+    overlay.innerHTML = `
+      <div class="vibe-link-card">
+        ${avatar}
+        <h1>${esc(room.name || 'Канал Vibe')}</h1>
+        <p>${esc(room.bio || ('Открываем канал vibe8.ru/' + code))}</p>
+        <div class="vibe-link-loading"></div>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+
+  function vibeHideChannelRouteLanding() {
+    document.querySelectorAll('.vibe-link-landing').forEach(el => {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .24s ease';
+      setTimeout(() => el.remove(), 260);
+    });
+  }
+
   function vibeShowChannelRouteSheet(room, code) {
     if (!room || document.querySelector('.vibe-subscribe-sheet')) return;
     installStyle();
@@ -12918,7 +12946,11 @@ window.openArchiveModal = function() {
         window.__vibePathChannelBooted = '';
         return;
       }
-      setTimeout(() => vibeShowChannelRouteSheet(room, code), 450);
+      vibeShowChannelRouteLanding(room, code);
+      setTimeout(() => {
+        vibeHideChannelRouteLanding();
+        setTimeout(() => vibeShowChannelRouteSheet(room, code), 260);
+      }, 2000);
     } catch (error) {
       window.__vibePathChannelBooted = '';
     }

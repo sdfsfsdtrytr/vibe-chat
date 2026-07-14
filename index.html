@@ -872,112 +872,6 @@ button:disabled {
 </style>
 </head>
 <body class="theme-dark">
-<script id="vibe-link-first-paint">
-(function() {
-  function cleanCode(value) {
-    return String(value || '')
-      .trim()
-      .replace(/^https?:\/\/(www\.)?vibe8\.ru\//i, '')
-      .replace(/^https?:\/\/(www\.)?t\.me\//i, '')
-      .replace(/^@+/, '')
-      .replace(/^\/+|\/+$/g, '')
-      .replace(/\s+/g, '_')
-      .replace(/[^a-zA-Z0-9_]/g, '')
-      .toLowerCase();
-  }
-  var params = new URLSearchParams(location.search || '');
-  var rawPath = decodeURIComponent((location.pathname || '').replace(/^\/+|\/+$/g, ''));
-  var rawCode = params.get('channel') || params.get('join') || rawPath;
-  if (!rawCode || rawCode.indexOf('.') !== -1 || /html$/i.test(rawCode)) return;
-  var code = cleanCode(rawCode);
-  if (!code) return;
-  window.__vibeIncomingChannelCode = code;
-
-  var css = document.createElement('style');
-  css.id = 'vibe-link-first-paint-style';
-  css.textContent = `
-    .vibe-link-landing {
-      position: fixed; inset: 0; z-index: 2147483900; padding: 22px;
-      display: flex; align-items: center; justify-content: center;
-      background: radial-gradient(circle at 22% 14%, rgba(21,151,255,.18), transparent 28%),
-                  radial-gradient(circle at 82% 74%, rgba(72,219,251,.14), transparent 34%), #050505;
-      color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-    }
-    .vibe-link-card {
-      width: min(430px, 100%); border-radius: 34px; padding: 30px 24px 24px; text-align: center;
-      background: linear-gradient(145deg, rgba(255,255,255,.14), rgba(255,255,255,.055));
-      border: 1px solid rgba(255,255,255,.16);
-      box-shadow: 0 28px 90px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.16);
-      backdrop-filter: blur(26px) saturate(180%); -webkit-backdrop-filter: blur(26px) saturate(180%);
-      animation: vibeLinkFirstIn .42s cubic-bezier(.18,.9,.22,1) both;
-    }
-    .vibe-link-avatar {
-      width: 118px; height: 118px; margin: 0 auto 18px; border-radius: 36px;
-      display: flex; align-items: center; justify-content: center; overflow: hidden;
-      background: rgba(255,255,255,.12); background-size: cover; background-position: center;
-      box-shadow: 0 18px 48px rgba(0,0,0,.38), inset 0 0 0 1px rgba(255,255,255,.12);
-      font-size: 54px;
-    }
-    .vibe-link-card h1 { margin: 0; font-size: 31px; line-height: 1.08; font-weight: 850; letter-spacing: 0; overflow-wrap: anywhere; }
-    .vibe-link-card p { margin: 12px auto 0; max-width: 330px; color: rgba(255,255,255,.68); font-size: 16px; line-height: 1.42; overflow-wrap: anywhere; }
-    .vibe-link-loading { margin: 24px auto 0; width: 54px; height: 5px; border-radius: 999px; background: rgba(255,255,255,.16); overflow: hidden; }
-    .vibe-link-loading:before { content: ""; display: block; width: 42%; height: 100%; border-radius: inherit; background: #1597ff; animation: vibeLinkFirstLoad 1.05s ease-in-out infinite; }
-    @keyframes vibeLinkFirstLoad { 0% { transform: translateX(-120%); } 100% { transform: translateX(260%); } }
-    @keyframes vibeLinkFirstIn { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
-  `;
-  document.head.appendChild(css);
-
-  function esc(value) {
-    return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
-      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
-    });
-  }
-  function avatar(room) {
-    var photo = room && (room.avatarPhoto || room.photo || room.image || room.iconPhoto);
-    if (photo) return '<div class="vibe-link-avatar" style="background-image:url(' + JSON.stringify(String(photo)) + ')"></div>';
-    return '<div class="vibe-link-avatar">' + esc((room && room.avatar) || '📣') + '</div>';
-  }
-  function paint(room, text) {
-    var overlay = document.querySelector('.vibe-link-landing');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.className = 'vibe-link-landing';
-      document.body.appendChild(overlay);
-    }
-    overlay.innerHTML = '<div class="vibe-link-card">' +
-      avatar(room) +
-      '<h1>' + esc((room && room.name) || 'Загружаем канал') + '</h1>' +
-      '<p>' + esc((room && (room.bio || room.description)) || text || 'Сейчас покажем карточку и откроем канал в Vibe.') + '</p>' +
-      '<div class="vibe-link-loading"></div>' +
-      '</div>';
-  }
-  paint(null);
-
-  async function loadRoom() {
-    try {
-      if (!window.firebase) return;
-      var config = {
-        apiKey: "AIzaSyAcs0ELY176L-d0qLZlpj1aJcej2b8fdPI",
-        authDomain: "vtcty-6c839.firebaseapp.com",
-        projectId: "vtcty-6c839",
-        databaseURL: "https://vtcty-6c839-default-rtdb.europe-west1.firebasedatabase.app",
-        storageBucket: "vtcty-6c839.firebasestorage.app"
-      };
-      if (!firebase.apps.length) firebase.initializeApp(config);
-      var dbEarly = firebase.database();
-      var linkSnap = await dbEarly.ref('roomLinks/' + code).once('value');
-      var roomId = linkSnap.val();
-      if (!roomId) return;
-      var roomSnap = await dbEarly.ref('rooms/' + roomId).once('value');
-      if (!roomSnap.exists()) return;
-      var room = Object.assign({ id: roomId }, roomSnap.val() || {});
-      paint(room, 'Открываем канал в Vibe...');
-    } catch (e) {}
-  }
-  loadRoom();
-})();
-</script>
-
 <div id="intro-screen">
     <video autoplay muted playsinline onended="this.parentElement.remove()">
         <source src="intro.mp4" type="video/mp4">
@@ -12444,22 +12338,15 @@ window.openArchiveModal = function() {
   function channelLink(peer) {
     const code = String((peer && (peer.inviteCode || peer.link || peer.channelLink)) || '').trim();
     const clean = code || `join_${peer && peer.id ? peer.id : ''}`;
-    return `https://vibe8.ru/join.html?channel=${encodeURIComponent(clean)}`;
+    return `https://vibe8.ru/${clean}`;
   }
 
   function normalizeChannelCode(value) {
-    const raw = String(value || '').trim();
-    try {
-      const parsed = new URL(raw, 'https://vibe8.ru');
-      const channel = parsed.searchParams.get('channel') || parsed.searchParams.get('join');
-      if (channel) return normalizeChannelCode(channel);
-    } catch (e) {}
-    return raw
+    return String(value || '')
       .trim()
       .toLowerCase()
       .replace(/^https?:\/\//, '')
       .replace(/^vibe8\.ru\//, '')
-      .replace(/^join\.html\?channel=/, '')
       .replace(/^t\.me\//, '')
       .replace(/^@/, '')
       .replace(/\s+/g, '_')
@@ -12646,7 +12533,7 @@ window.openArchiveModal = function() {
     if (!canEditRoom(room)) return;
     window.__vibeChannelTypeDraft = room.isPublic ? 'public' : 'private';
     const link = room.inviteCode || (`join_${Math.random().toString(36).slice(2, 9)}`);
-    const displayLink = `https://vibe8.ru/join.html?channel=${encodeURIComponent(link)}`;
+    const displayLink = `https://vibe8.ru/${link}`;
     const readonly = room.isPublic ? '' : 'readonly';
     const body = `
       <div class="vibe-editor-section-label">Ссылка</div>
@@ -12655,7 +12542,7 @@ window.openArchiveModal = function() {
         <label class="vibe-editor-radio" onclick="vibePickChannelType('private')"><span class="check" id="type-check-private">${!room.isPublic ? '✓' : ''}</span><span>Частная</span></label>
       </div>
       <div class="vibe-editor-note">Публичные каналы можно найти через поиск, подписаться на них может любой пользователь.</div>
-      <input id="vibe-channel-link-edit" class="vibe-editor-link-input" value="${esc(displayLink)}" ${readonly} placeholder="https://vibe8.ru/join.html?channel=channel">
+      <input id="vibe-channel-link-edit" class="vibe-editor-link-input" value="${esc(displayLink)}" ${readonly} placeholder="https://vibe8.ru/channel">
       <div class="vibe-editor-note">Можно использовать латиницу, цифры и подчёркивание. Минимальная длина — 5 символов.</div>`;
     mountRoomEditor('Тип канала', body, `vibeSaveChannelType('${room.id}')`, `vibeOpenRoomEditor('${room.id}')`);
   };
@@ -12668,11 +12555,11 @@ window.openArchiveModal = function() {
     if (priv) priv.textContent = type === 'private' ? '✓' : '';
     const input = $('vibe-channel-link-edit');
     if (input && type === 'private') {
-      input.value = 'https://vibe8.ru/join.html?channel=join_' + Math.random().toString(36).slice(2, 9);
+      input.value = 'https://vibe8.ru/join_' + Math.random().toString(36).slice(2, 9);
       input.readOnly = true;
     }
     if (input && type === 'public') {
-      if (String(input.value || '').includes('join_')) input.value = 'https://vibe8.ru/join.html?channel=';
+      if (String(input.value || '').includes('join_')) input.value = 'https://vibe8.ru/';
       input.readOnly = false;
       input.focus();
     }
@@ -12864,222 +12751,6 @@ window.openArchiveModal = function() {
     if (typeof renderDialogsFixed === 'function') renderDialogsFixed();
   };
 
-  function incomingChannelCode() {
-    const params = new URLSearchParams(location.search || '');
-    const fromQuery = params.get('channel') || params.get('join') || '';
-    const rawPath = decodeURIComponent((location.pathname || '').replace(/^\/+|\/+$/g, ''));
-    const code = fromQuery || rawPath;
-    if (!code || code.includes('.') || code.toLowerCase().endsWith('html')) return '';
-    return normalizeChannelCode(code);
-  }
-
-  function linkAvatar(room) {
-    const photo = photoOf(room);
-    if (photo) return `<div class="vibe-link-avatar" style="background-image:url('${safeUrl(photo)}')"></div>`;
-    return `<div class="vibe-link-avatar">${esc(room.avatar || '📣')}</div>`;
-  }
-
-  function showChannelLanding(room, loading = true) {
-    document.querySelectorAll('.vibe-link-landing').forEach(el => el.remove());
-    const overlay = document.createElement('div');
-    overlay.className = 'vibe-link-landing';
-    overlay.innerHTML = `
-      <div class="vibe-link-card">
-        ${linkAvatar(room)}
-        <h1>${esc(room.name || 'Канал Vibe')}</h1>
-        <p>${esc(room.bio || 'Открываем канал в Vibe...')}</p>
-        ${loading ? '<div class="vibe-link-loading"></div>' : ''}
-      </div>`;
-    document.body.appendChild(overlay);
-  }
-
-  function updateChannelLanding(room, loading = true) {
-    const current = document.querySelector('.vibe-link-landing');
-    if (!current) return showChannelLanding(room, loading);
-    const card = current.querySelector('.vibe-link-card');
-    if (!card) return showChannelLanding(room, loading);
-    card.innerHTML = `
-      ${linkAvatar(room)}
-      <h1>${esc(room.name || 'Канал Vibe')}</h1>
-      <p>${esc(room.bio || 'Открываем канал в Vibe...')}</p>
-      ${loading ? '<div class="vibe-link-loading"></div>' : ''}`;
-  }
-
-  function hideChannelLanding() {
-    document.querySelectorAll('.vibe-link-landing').forEach(el => {
-      el.style.opacity = '0';
-      setTimeout(() => el.remove(), 220);
-    });
-  }
-
-  function showSubscribePrompt(room) {
-    document.querySelectorAll('.vibe-subscribe-sheet').forEach(el => el.remove());
-    const privateNeedRequest = room.type === 'channel' && !room.isPublic;
-    const loggedIn = !!meNow();
-    const sheet = document.createElement('div');
-    sheet.className = 'vibe-subscribe-sheet';
-    sheet.innerHTML = `
-      <div class="vibe-subscribe-title">${!loggedIn ? 'Войти и подписаться?' : (privateNeedRequest ? 'Отправить запрос?' : 'Подписаться на канал?')}</div>
-      <div class="vibe-subscribe-text">${esc(room.name || 'Канал')} ${!loggedIn ? 'открылся по ссылке. Войди в аккаунт, и мы сразу предложим подписаться.' : 'будет добавлен в ваши чаты.'}</div>
-      <div class="vibe-subscribe-actions">
-        <button style="background:rgba(255,255,255,.12)" onclick="this.closest('.vibe-subscribe-sheet').remove()">Отклонить</button>
-        <button style="background:var(--accent,#1597ff)" onclick="${loggedIn ? `vibeAcceptChannelLink('${room.id}', ${privateNeedRequest ? 'true' : 'false'})` : `vibeFocusAuthFromChannel('${room.id}')`}">${loggedIn ? (privateNeedRequest ? 'Запрос' : 'Подписаться') : 'Войти'}</button>
-      </div>`;
-    document.body.appendChild(sheet);
-    requestAnimationFrame(() => sheet.classList.add('visible'));
-  }
-
-  function savePendingChannel(room, code = '') {
-    if (!room || !room.id) return;
-    const data = {
-      id: room.id,
-      code: code || room.inviteCode || room.link || '',
-      savedAt: Date.now()
-    };
-    try { localStorage.setItem('vibe_pending_channel_link', JSON.stringify(data)); } catch (e) {}
-    try { sessionStorage.setItem('vibe_pending_channel_link', JSON.stringify(data)); } catch (e) {}
-  }
-
-  function readPendingChannel() {
-    const raw = (() => {
-      try { return sessionStorage.getItem('vibe_pending_channel_link') || localStorage.getItem('vibe_pending_channel_link'); } catch (e) { return ''; }
-    })();
-    if (!raw) return null;
-    try {
-      const data = JSON.parse(raw);
-      if (!data || !data.id || Date.now() - Number(data.savedAt || 0) > 24 * 60 * 60 * 1000) return null;
-      return data;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function clearPendingChannel() {
-    try { localStorage.removeItem('vibe_pending_channel_link'); } catch (e) {}
-    try { sessionStorage.removeItem('vibe_pending_channel_link'); } catch (e) {}
-  }
-
-  window.vibeFocusAuthFromChannel = function(roomId) {
-    document.querySelectorAll('.vibe-subscribe-sheet').forEach(el => el.remove());
-    const auth = document.getElementById('auth-page');
-    if (auth) auth.style.display = 'flex';
-    showCopyToast('Войди, чтобы подписаться на канал');
-  };
-
-  window.vibeAcceptChannelLink = async function(roomId, requestOnly = false) {
-    if (!meNow()) return window.vibeFocusAuthFromChannel(roomId);
-    if (requestOnly && typeof requestJoinChannel === 'function') await requestJoinChannel(roomId);
-    else if (typeof joinOrOpenRoom === 'function') await joinOrOpenRoom(roomId);
-    clearPendingChannel();
-    document.querySelectorAll('.vibe-subscribe-sheet').forEach(el => el.remove());
-    let room = await freshRoom(roomId);
-    if (room) openLinkedRoom(room);
-  };
-
-  function openLinkedRoom(room) {
-    if (!room) return;
-    if ((window.innerWidth || 0) > 768 && typeof openPCChat === 'function') openPCChat(room);
-    else if (typeof openMobChat === 'function') openMobChat(room);
-  }
-
-  function showEarlyChannelLanding() {
-    const code = incomingChannelCode();
-    if (!code || document.querySelector('.vibe-link-landing')) return;
-    showChannelLanding({
-      name: 'Vibe',
-      bio: 'Загружаем канал...',
-      avatar: '📣'
-    });
-  }
-
-  async function waitForLinkDatabase() {
-    for (let i = 0; i < 40; i++) {
-      if (typeof db !== 'undefined' && db && typeof db.ref === 'function') return true;
-      await new Promise(resolve => setTimeout(resolve, 150));
-    }
-    return false;
-  }
-
-  async function findRoomByChannelCode(code) {
-    const linkSnap = await db.ref(`roomLinks/${code}`).once('value');
-    let roomId = linkSnap.val();
-    if (roomId) {
-      const roomSnap = await db.ref(`rooms/${roomId}`).once('value');
-      if (roomSnap.exists()) return { id: roomId, ...(roomSnap.val() || {}) };
-    }
-    const roomsSnap = await db.ref('rooms').once('value');
-    const rooms = roomsSnap.val() || {};
-    const match = Object.entries(rooms).find(([, room]) => {
-      if (!room || room.type !== 'channel') return false;
-      return [room.inviteCode, room.publicLink, room.link, room.slug]
-        .map(value => normalizeChannelCode(value || ''))
-        .includes(code);
-    });
-    return match ? { id: match[0], ...(match[1] || {}) } : null;
-  }
-
-  async function openChannelFromWebLink() {
-    const code = incomingChannelCode();
-    if (!code) return;
-    showEarlyChannelLanding();
-    try {
-      const ready = await waitForLinkDatabase();
-      if (!ready) {
-        updateChannelLanding({ name: 'Vibe', bio: 'Не удалось подключиться. Обнови страницу.', avatar: '📣' }, false);
-        return;
-      }
-      const room = await findRoomByChannelCode(code);
-      if (!room) {
-        updateChannelLanding({ name: 'Канал не найден', bio: 'Проверь ссылку или попроси новую.', avatar: '⚠️' }, false);
-        return;
-      }
-      savePendingChannel(room, code);
-      updateChannelLanding(room);
-      setTimeout(async () => {
-        hideChannelLanding();
-        if (!meNow()) {
-          showSubscribePrompt(room);
-          return;
-        }
-        roomCache(room);
-        if (room.members && room.members[meNow().id]) {
-          openLinkedRoom(room);
-          return;
-        }
-        openLinkedRoom(room);
-        setTimeout(() => showSubscribePrompt(room), 350);
-      }, 2000);
-    } catch (error) {}
-  }
-
-  async function continuePendingChannelLink() {
-    const pending = readPendingChannel();
-    if (!pending || !meNow()) return;
-    try {
-      const room = await freshRoom(pending.id);
-      if (!room || room.type !== 'channel') {
-        clearPendingChannel();
-        return;
-      }
-      if (room.members && room.members[meNow().id]) {
-        clearPendingChannel();
-        openLinkedRoom(room);
-        return;
-      }
-      openLinkedRoom(room);
-      setTimeout(() => showSubscribePrompt(room), 450);
-    } catch (e) {}
-  }
-
-  if (!window.__vibeWebChannelLinkBoot) {
-    window.__vibeWebChannelLinkBoot = true;
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showEarlyChannelLanding);
-    else showEarlyChannelLanding();
-    window.addEventListener('load', () => setTimeout(openChannelFromWebLink, 700));
-    window.addEventListener('load', () => setTimeout(continuePendingChannelLink, 1700));
-    setInterval(continuePendingChannelLink, 2600);
-  }
-
   function renderInfo(peer) {
     installStyle();
     document.querySelectorAll('.vibe-mobile-info').forEach(el => el.remove());
@@ -13139,6 +12810,125 @@ window.openArchiveModal = function() {
     document.body.classList.add('vibe-profile-open');
     updateSoundButtons();
     scheduleSoundStateRefresh();
+  }
+
+  function vibeRouteChannelCode() {
+    const params = new URLSearchParams(location.search || '');
+    const fromQuery = params.get('channel') || params.get('join') || '';
+    const rawPath = decodeURIComponent((location.pathname || '').replace(/^\/+|\/+$/g, ''));
+    const raw = fromQuery || rawPath;
+    if (!raw) return '';
+    const lower = raw.toLowerCase();
+    if (lower === 'index.html' || lower === '404.html' || lower === 'join.html') return '';
+    if (raw.includes('.') && !fromQuery) return '';
+    return normalizeChannelCode(raw);
+  }
+
+  async function vibeFindChannelByCode(code) {
+    if (!code || typeof db === 'undefined' || !db.ref) return null;
+    const linkSnap = await db.ref(`roomLinks/${code}`).once('value');
+    const roomId = linkSnap.val();
+    if (roomId) {
+      const room = await freshRoom(roomId);
+      if (room && room.type === 'channel') return room;
+    }
+    const roomsSnap = await db.ref('rooms').once('value');
+    const rooms = roomsSnap.val() || {};
+    const found = Object.entries(rooms).find(([, room]) => {
+      if (!room || room.type !== 'channel') return false;
+      return [room.inviteCode, room.publicLink, room.link, room.slug]
+        .map(value => normalizeChannelCode(value || ''))
+        .includes(code);
+    });
+    return found ? { id: found[0], ...(found[1] || {}) } : null;
+  }
+
+  function vibeOpenLinkedChannel(room) {
+    if (!room) return;
+    roomCache(room);
+    if ((window.innerWidth || 0) > 768 && typeof window.openPCChat === 'function') window.openPCChat(room);
+    else if (typeof window.openMobChat === 'function') window.openMobChat(room);
+  }
+
+  function vibeShowChannelRouteSheet(room, code) {
+    if (!room || document.querySelector('.vibe-subscribe-sheet')) return;
+    installStyle();
+    const user = meNow();
+    const isMember = !!(user && room.members && room.members[user.id]);
+    if (isMember) {
+      vibeOpenLinkedChannel(room);
+      return;
+    }
+    const privateNeedRequest = room.type === 'channel' && !room.isPublic;
+    const photo = photoOf(room);
+    const avatar = photo
+      ? `<span class="avatar-emoji has-photo" style="background-image:url('${safeUrl(photo)}');background-size:cover;background-position:center;color:transparent;width:48px;height:48px;flex:0 0 48px;"></span>`
+      : `<span class="avatar-emoji" style="width:48px;height:48px;flex:0 0 48px;">${esc(room.avatar || '📣')}</span>`;
+    const sheet = document.createElement('div');
+    sheet.className = 'vibe-subscribe-sheet';
+    sheet.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;">
+        ${avatar}
+        <div style="min-width:0;">
+          <div class="vibe-subscribe-title" style="margin:0;">${esc(room.name || 'Канал')}</div>
+          <div class="vibe-subscribe-text" style="margin:4px 0 0;">${esc(room.bio || 'Канал открыт по ссылке vibe8.ru/' + code)}</div>
+        </div>
+      </div>
+      <div class="vibe-subscribe-actions">
+        <button style="background:rgba(255,255,255,.12)" onclick="this.closest('.vibe-subscribe-sheet').remove()">Отклонить</button>
+        <button style="background:var(--accent,#1597ff)" onclick="vibeAcceptPathChannel('${room.id}', ${privateNeedRequest ? 'true' : 'false'})">${user ? (privateNeedRequest ? 'Запрос' : 'Подписаться') : 'Войти'}</button>
+      </div>`;
+    document.body.appendChild(sheet);
+    requestAnimationFrame(() => sheet.classList.add('visible'));
+  }
+
+  window.vibeAcceptPathChannel = async function(roomId, requestOnly = false) {
+    const user = meNow();
+    if (!user) {
+      const auth = document.getElementById('auth-page');
+      if (auth) auth.style.display = 'flex';
+      showCopyToast('Войди, чтобы подписаться');
+      return;
+    }
+    const room = await freshRoom(roomId);
+    if (!room) return;
+    if (requestOnly) {
+      await db.ref(`rooms/${roomId}/joinRequests/${user.id}`).set({ userId: user.id, name: user.name || '', avatar: user.avatar || '👤', time: Date.now() });
+      showCopyToast('Запрос отправлен');
+    } else {
+      await db.ref(`rooms/${roomId}/members/${user.id}`).set(true);
+      await db.ref(`userRooms/${user.id}/${roomId}`).set(true);
+      room.members = { ...(room.members || {}), [user.id]: true };
+      roomCache(room);
+      showCopyToast('Канал добавлен');
+      if (typeof renderDialogsFixed === 'function') renderDialogsFixed();
+      vibeOpenLinkedChannel(room);
+    }
+    document.querySelectorAll('.vibe-subscribe-sheet').forEach(el => el.remove());
+  };
+
+  async function vibeBootPathChannel() {
+    const code = vibeRouteChannelCode();
+    if (!code || window.__vibePathChannelBooted === code) return;
+    if (typeof db === 'undefined' || !db.ref) return;
+    window.__vibePathChannelBooted = code;
+    try {
+      const room = await vibeFindChannelByCode(code);
+      if (!room) {
+        window.__vibePathChannelBooted = '';
+        return;
+      }
+      setTimeout(() => vibeShowChannelRouteSheet(room, code), 450);
+    } catch (error) {
+      window.__vibePathChannelBooted = '';
+    }
+  }
+
+  if (!window.__vibePathChannelInstalled) {
+    window.__vibePathChannelInstalled = true;
+    window.addEventListener('load', () => setTimeout(vibeBootPathChannel, 900));
+    document.addEventListener('DOMContentLoaded', () => setTimeout(vibeBootPathChannel, 900));
+    setTimeout(vibeBootPathChannel, 1600);
   }
 
   window.showPeerProfile = async function() {
